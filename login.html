@@ -1,0 +1,85 @@
+<!--
+  Recreo Bienestar — acceso de demostración.
+  No implementa autenticación real: cualquier dato ingresado simplemente
+  redirige al área de miembras simulada. Sin backend ni base de datos.
+-->
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Acceder | Recreo Bienestar</title>
+<meta name="description" content="Accedé a la demostración de la plataforma Recreo Bienestar. Entorno de demostración, sin autenticación real.">
+<meta name="robots" content="noindex, follow">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Saltar al contenido principal</a>
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="icon-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M13 6l6 6-6 6"/></symbol>
+  <symbol id="icon-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5.5c0 4.6-3 7.9-7 9.5-4-1.6-7-4.9-7-9.5V6l7-3z"/><path d="M9 12l2 2 4-4.5"/></symbol>
+</svg>
+
+<header class="site-header">
+  <div class="container nav-bar">
+    <a href="index.html" class="logo">
+      <span class="logo-mark" aria-hidden="true">R</span>
+      Recreo Bienestar
+    </a>
+    <div class="nav-right">
+      <nav class="nav-links" data-nav-links aria-label="Navegación">
+        <a href="index.html">← Volver al sitio</a>
+      </nav>
+      <button class="nav-toggle" data-nav-toggle aria-label="Abrir menú" aria-expanded="false">
+        <span></span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <div class="login-wrap">
+    <div class="container" style="display:flex;justify-content:center">
+      <div class="login-card">
+        <a href="index.html" class="logo">
+          <span class="logo-mark" aria-hidden="true">R</span>
+          Recreo Bienestar
+        </a>
+        <h1>Bienvenida de nuevo</h1>
+        <p>
+          <span class="badge-preview"><svg width="13" height="13"><use href="#icon-shield"></use></svg> Entorno de demostración — no se requieren credenciales reales</span>
+        </p>
+
+        <form class="login-form" data-demo-login aria-label="Formulario de acceso de demostración">
+          <div class="field">
+            <label for="login-email">Correo electrónico</label>
+            <input type="email" id="login-email" name="email" placeholder="tu@email.com" autocomplete="email">
+          </div>
+          <div class="field">
+            <label for="login-pass">Contraseña</label>
+            <input type="password" id="login-pass" name="password" placeholder="••••••••" autocomplete="current-password">
+          </div>
+          <button class="btn btn-primary btn-block" type="submit">Ingresar a la demo <svg width="16" height="16"><use href="#icon-arrow-right"></use></svg></button>
+        </form>
+
+        <div class="login-divider">o</div>
+        <a class="btn btn-ghost btn-block" href="miembros.html">Entrar directamente a la demo</a>
+
+        <p class="form-note" style="margin-top:1.5rem">Este acceso es solo una simulación visual del inicio de sesión. No se validan credenciales ni se almacenan datos.</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="container footer-legal">
+    <span>© 2026 Recreo Bienestar.</span>
+    <span class="demo-note">Sitio de demostración funcional.</span>
+  </div>
+</footer>
+
+<script src="js/main.js"></script>
+</body>
+</html>
