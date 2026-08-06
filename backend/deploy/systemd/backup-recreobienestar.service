@@ -1,0 +1,26 @@
+# Host-level systemd unit — runs deploy/scripts/backup_db.sh, which calls
+# `docker exec recreo-db pg_dump ...` from the host (not from inside any
+# container). Installed manually via SSH:
+#
+#   sudo cp backup-recreobienestar.service backup-recreobienestar.timer \
+#     /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now backup-recreobienestar.timer
+#
+# SECURITY_AUDIT.md HIGH-3: automated PostgreSQL backups. Retention (14
+# days) and the restore procedure are documented in backup_db.sh's own
+# header comment and ARCHITECTURE.md §14 — this unit only handles
+# scheduling. Restore was validated end-to-end during Stage A hardening
+# against an isolated, throwaway postgres container (never against
+# recreo-db or any container reachable from the app), confirming the
+# dump/restore cycle reproduces the source data exactly before this was
+# trusted as a real backup mechanism.
+[Unit]
+Description=Daily PostgreSQL backup for recreo-bienestar (recreo-db)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+ExecStart=/home/ubuntu/recreo-bienestar-backend/deploy/scripts/backup_db.sh

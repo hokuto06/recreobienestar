@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'django_filters',
+    'axes',
     'accounts',
     'catalog',
     'memberships',
@@ -55,6 +56,10 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # Last, per django-axes' own requirement — needs to see the response
+    # AuthenticationMiddleware/the view produced before deciding whether to
+    # count/lock out this attempt.
+    'axes.middleware.AxesMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -131,10 +136,17 @@ MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # ── Authentication ───────────────────────────────────────────────────────
-# EmailOrUsernameModelBackend first (lets members log in with either);
-# ModelBackend stays as a fallback so anything relying on default
-# username-only behavior (e.g. Django Admin's own login form) is unaffected.
+# AxesBackend MUST be first — it's a gate, not a credential checker: it
+# short-circuits authentication entirely (regardless of which backend
+# below would have accepted the credentials) once an account/IP is locked
+# out. Covers BOTH /ingresar/ (accounts.views.MemberLoginView) and
+# /gestion/login/ (Django Admin's own built-in login) uniformly, since
+# both ultimately call django.contrib.auth.authenticate() — no per-view
+# wiring needed. EmailOrUsernameModelBackend next (lets members log in
+# with either); ModelBackend stays as a fallback so anything relying on
+# default username-only behavior is unaffected.
 AUTHENTICATION_BACKENDS = [
+    'axes.backends.AxesBackend',
     'accounts.backends.EmailOrUsernameModelBackend',
     'django.contrib.auth.backends.ModelBackend',
 ]
@@ -142,6 +154,31 @@ AUTHENTICATION_BACKENDS = [
 LOGIN_URL = '/ingresar/'
 LOGIN_REDIRECT_URL = '/mi-cuenta/'
 LOGOUT_REDIRECT_URL = '/'
+
+# ── Brute-force protection (SECURITY_AUDIT.md HIGH-1) ────────────────────
+# 5 failed attempts (per username+IP combination) locks that combination
+# out for 1 hour. A successful login resets the counter. Deliberately
+# scoped to username+IP (the django-axes default), not IP alone — a
+# shared IP (office, campus, carrier-grade NAT) failing to log into one
+# account shouldn't lock every account behind that IP out of everything.
+AXES_FAILURE_LIMIT = 5
+AXES_COOLOFF_TIME = 1  # hours
+AXES_LOCKOUT_PARAMETERS = ['username', 'ip_address']
+AXES_RESET_COOL_OFF_ON_FAILURE_DURING_LOCKOUT = True
+# Plain-text, no template dependency — avoids needing a dedicated lockout
+# page for what's meant to be a rare, self-explanatory event.
+#
+# NOTE: the setting axes actually reads here is AXES_COOLOFF_MESSAGE, not
+# AXES_LOCKOUT_MESSAGE (that name doesn't exist in django-axes and is
+# silently ignored — get_lockout_message() picks AXES_COOLOFF_MESSAGE
+# whenever AXES_COOLOFF_TIME is set, which it is above, and only falls
+# back to AXES_PERMALOCK_MESSAGE for permanent lockouts). Caught during
+# Stage A validation by inspecting axes.helpers.get_lockout_message
+# directly rather than assuming the setting name.
+AXES_COOLOFF_MESSAGE = (
+    'Demasiados intentos fallidos. Probá de nuevo en un rato, '
+    'o usá "¿Olvidaste tu contraseña?" para recuperar el acceso.'
+)
 
 # ── Email ────────────────────────────────────────────────────────────────
 # Console backend only — password reset emails are printed to the

@@ -1,0 +1,20 @@
+# See certbot-recreobienestar.service for installation instructions and
+# why this is a separate unit from the host's stock certbot.timer.
+#
+# Twice daily, offset from the stock certbot.timer's 00:00/12:00 schedule
+# purely so the two don't contend for the certbot lock file at the exact
+# same moment — not otherwise significant. `certbot renew` is a no-op
+# unless the cert is within its renew-before-expiry window (default 30
+# days), so running this often is the standard, safe, widely-recommended
+# pattern — matches exactly how the host's own stock timer already
+# operates for its certificates.
+[Unit]
+Description=Run certbot renewal for recreobienestar.com twice daily
+
+[Timer]
+OnCalendar=*-*-* 03,15:00:00
+RandomizedDelaySec=1800
+Persistent=true
+
+[Install]
+WantedBy=timers.target

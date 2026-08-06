@@ -1,0 +1,37 @@
+# Host-level systemd unit — NOT deployed via docker-compose (certbot runs
+# on the EC2 host itself, outside any container, using the host-installed
+# certbot package). Installed manually via SSH:
+#
+#   sudo cp certbot-recreobienestar.service certbot-recreobienestar.timer \
+#     /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now certbot-recreobienestar.timer
+#
+# Why this exists as a SEPARATE unit from the host's stock `certbot.timer`:
+# this certificate was issued into a custom certbot config directory
+# (`nginx-flask-prod/letsencrypt`, not the host's default
+# `/etc/letsencrypt`) — see ARCHITECTURE.md §12/SECURITY_AUDIT.md HIGH-2.
+# The stock certbot.timer only ever looks at the default config dir, so it
+# has no knowledge of this cert at all. This unit targets the correct
+# config-dir explicitly and reloads recreo-nginx after a successful
+# renewal so the new cert is actually picked up.
+[Unit]
+Description=Certbot renewal for recreobienestar.com (custom config-dir)
+Documentation=https://certbot.eff.org/docs
+
+[Service]
+Type=oneshot
+# --no-random-sleep-on-renew: certbot's own non-interactive `renew` path
+# otherwise adds its own internal randomized delay (up to several
+# minutes, meant to spread cron-triggered thundering-herd load across
+# Let's Encrypt's infrastructure) on top of this unit's own
+# RandomizedDelaySec jitter in certbot-recreobienestar.timer — the timer
+# already provides that spread, so the extra certbot-side delay is pure
+# redundant latency here. Confirmed via `--dry-run`: without this flag,
+# a non-interactive renewal check sits in an internal sleep of several
+# minutes before doing anything, which looks identical to a hang.
+ExecStart=/usr/bin/certbot -q renew \
+  --config-dir /home/ubuntu/nginx-flask-prod/letsencrypt \
+  --no-random-sleep-on-renew \
+  --deploy-hook "docker exec recreo-nginx nginx -s reload"
+PrivateTmp=true

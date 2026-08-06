@@ -373,20 +373,27 @@ already true):
   (`/home/ubuntu/nginx-flask-prod/certbot/www`) read-only at
   `/var/www/certbot`, so the ACME HTTP-01 challenge continues to be
   servable from the same location renewal already targets.
-- **Finding, pre-existing and unrelated to this phase**: the host's
-  automatic `certbot.timer`/`certbot.service` (systemd, twice daily) only
-  renews certs under the *default* `/etc/letsencrypt` — it has no
-  knowledge of this custom config-dir cert. This cert has **no automatic
-  renewal today** and will simply expire 2026-11-03 unless renewed
-  manually (or a new, separately-scheduled job is set up — not done here,
-  per "stop and explain before changing anything risky").
-- **The exact, safe manual renewal command**, unchanged by this phase:
+- **Finding, discovered Phase 2.5, resolved in Stage A (SECURITY_AUDIT.md
+  HIGH-2)**: the host's automatic `certbot.timer`/`certbot.service`
+  (systemd, twice daily) only renews certs under the *default*
+  `/etc/letsencrypt` — it has no knowledge of this custom config-dir cert.
+  A dedicated `certbot-recreobienestar.timer`/`.service` pair (installed
+  at `/etc/systemd/system/`, source in `deploy/systemd/`) now handles it
+  separately: twice daily (03:00/15:00, offset from the stock timer purely
+  so the two never contend for certbot's lock file at the same instant),
+  targeting the correct `--config-dir` and reloading `recreo-nginx` via
+  `--deploy-hook` on success. `--no-random-sleep-on-renew` is set
+  deliberately — certbot's own internal jitter for non-interactive runs
+  (up to several minutes) is redundant on top of the timer's own
+  `RandomizedDelaySec=1800`, and without it a routine renewal check looks
+  like a hang. Validated via `certbot renew --dry-run` against this exact
+  config before install (all simulated renewals succeeded).
+- **The renewal command**, run automatically by the timer above:
   ```bash
   sudo certbot renew --config-dir /home/ubuntu/nginx-flask-prod/letsencrypt \
+    --no-random-sleep-on-renew \
     --deploy-hook "docker exec recreo-nginx nginx -s reload"
   ```
-  The `--deploy-hook` reload is the only new addition Phase 2.5 requires —
-  previously it would have needed to reload `nginx-proxy` instead.
 - No certs, keys, or renewal config were copied into git at any point —
   the mount is the only mechanism, always read-only.
 
@@ -444,6 +451,23 @@ docker compose start recreo-db
 Both tested end-to-end during Phase 2 (dump created, contents listed via
 `pg_restore --list`, then deleted — no artifacts left behind).
 
+**Automated daily backups** (Stage A, SECURITY_AUDIT.md HIGH-3):
+`deploy/scripts/backup_db.sh` runs the logical `pg_dump` above on a
+schedule via `backup-recreobienestar.timer`/`.service` (daily 02:15,
+installed at `/etc/systemd/system/`), writing to
+`/home/ubuntu/backups/recreo-bienestar/` — deliberately outside
+`recreo-bienestar-backend/` so a dump (real user data, password hashes)
+can never be swept into an rsync or git operation. Each dump is
+self-validated with `pg_restore --list` immediately after creation; a
+truncated/corrupt dump is deleted rather than kept. Retention: 14 days,
+enforced by the script on every run. Restore procedure is the same
+`pg_restore --clean --if-exists` command shown above. The full
+dump→restore→verify cycle was validated during Stage A against an
+isolated, throwaway `postgres:16-alpine` container (never `recreo-db`
+itself) — row counts for `auth_user`, `catalog_video`,
+`catalog_category`, and `memberships_membershipplan` matched the live
+database exactly before this was trusted as a working backup.
+
 ## 15. Known infrastructure constraints
 
 - **t2.micro, 954MB RAM, 0 swap.** Baseline OS/daemon overhead
@@ -462,10 +486,11 @@ Both tested end-to-end during Phase 2 (dump created, contents listed via
   `silviorodriguez.com.ar` are offline (§12), by explicit decision,
   until migrated to their own infrastructure. No HA, no staging
   environment for any of them.
-- **Cert renewal gap** (§12): `recreobienestar.com`'s certificate has no
-  automatic renewal — a pre-existing condition, not introduced by this
-  phase, but now more consequential since this cert is the only thing
-  keeping the box's sole public site on HTTPS. Expires 2026-11-03.
+- **Cert renewal gap (§12) — resolved in Stage A**: `recreobienestar.com`'s
+  certificate now renews automatically via `certbot-recreobienestar.timer`.
+  Expires 2026-11-03 if renewal ever silently stops working; the timer's
+  own status (`systemctl list-timers certbot-recreobienestar.timer`) is
+  the place to check first.
 
 ## 16. Future phases (not started)
 
@@ -590,7 +615,9 @@ docker compose up -d recreo-nginx        # or: docker exec recreo-nginx nginx -s
 # Test nginx changes on temp ports before touching live 80/443
 docker compose -f docker-compose.yml -f docker-compose.tmpports.yml up -d recreo-nginx
 
-# Renew the certificate (see §12 — no automatic renewal exists yet)
+# Renew the certificate manually (see §12 — normally handled automatically
+# by certbot-recreobienestar.timer; only needed to force a check now)
 sudo certbot renew --config-dir /home/ubuntu/nginx-flask-prod/letsencrypt \
+  --no-random-sleep-on-renew \
   --deploy-hook "docker exec recreo-nginx nginx -s reload"
 ```

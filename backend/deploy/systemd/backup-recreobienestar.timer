@@ -1,0 +1,17 @@
+# See backup-recreobienestar.service for installation steps.
+#
+# Daily at 02:15 — ahead of both the stock certbot.timer (00:00/12:00)
+# and certbot-recreobienestar.timer (03:00/15:00), so a backup always
+# completes before either renewal job's deploy-hook reloads recreo-nginx,
+# and none of the three ever contend for host resources at the same
+# moment.
+[Unit]
+Description=Run recreo-bienestar PostgreSQL backup daily
+
+[Timer]
+OnCalendar=*-*-* 02:15:00
+RandomizedDelaySec=600
+Persistent=true
+
+[Install]
+WantedBy=timers.target

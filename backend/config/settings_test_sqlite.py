@@ -32,3 +32,17 @@ STORAGES = {
         'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
     },
 }
+
+# django-axes' AxesBackend requires a `request` argument to authenticate()
+# (it needs one to know the caller's IP) — but Django's test-client
+# shortcut `self.client.login(...)` calls authenticate() with no request
+# at all, since it exists purely to establish a session for tests that
+# aren't exercising the login view itself (e.g. logout tests). That
+# shortcut is unrelated to axes and used throughout this suite, so axes
+# is switched off for the generic test run to keep it working. This does
+# NOT weaken real coverage: axes' actual lockout behavior is exercised
+# directly by accounts.tests.test_auth.BruteForceLockoutTests, which
+# re-enables it and posts real requests through the real login view, the
+# same path production traffic takes. Production (config.settings) never
+# imports this file and is unaffected either way.
+AXES_ENABLED = False

@@ -1,6 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.core import mail
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from accounts.models import Profile
@@ -118,6 +118,60 @@ class LoginLogoutTests(TestCase):
         self.client.post(reverse('accounts:logout'))
         resp = self.client.get(reverse('accounts:dashboard'))
         self.assertRedirects(resp, f"{reverse('accounts:login')}?next={reverse('accounts:dashboard')}")
+
+
+# Axes is off by default for this test run (config/settings_test_sqlite.py
+# — django-axes' AxesBackend requires a `request` arg that the
+# self.client.login() shortcut used elsewhere in this file never
+# supplies). This class explicitly re-enables it and never uses that
+# shortcut — every attempt below is a real POST through the real
+# /ingresar/ view, the same path production traffic takes, so this is
+# the one place SECURITY_AUDIT.md HIGH-1's actual remediation is
+# verified end-to-end rather than assumed from config alone.
+@override_settings(AXES_ENABLED=True, AXES_FAILURE_LIMIT=3)
+class BruteForceLockoutTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='miembra2', email='miembra2@example.com', password='ClaveSegura123!',
+        )
+        self.login_url = reverse('accounts:login')
+
+    def test_locked_out_after_failure_limit_even_with_correct_password(self):
+        # First 2 failures are ordinary wrong-password rejections
+        # (AXES_FAILURE_LIMIT=3 hasn't been reached yet).
+        for _ in range(2):
+            resp = self.client.post(self.login_url, {
+                'username': 'miembra2', 'password': 'incorrecta',
+            })
+            self.assertEqual(resp.status_code, 200)
+
+        # The 3rd failure crosses the limit. AxesMiddleware runs the view
+        # first (recording the failure), then swaps in its own 429
+        # response for this SAME request — it doesn't wait for a 4th
+        # attempt.
+        resp = self.client.post(self.login_url, {
+            'username': 'miembra2', 'password': 'incorrecta',
+        })
+        self.assertEqual(resp.status_code, 429)
+        self.assertContains(resp, 'Demasiados intentos fallidos', status_code=429)
+
+        # And now even the CORRECT password is refused — proving this is
+        # a real lockout, not just repeated wrong-password rejection.
+        resp = self.client.post(self.login_url, {
+            'username': 'miembra2', 'password': 'ClaveSegura123!',
+        })
+        self.assertEqual(resp.status_code, 429)
+
+        # No session was ever established.
+        resp = self.client.get(reverse('accounts:dashboard'))
+        self.assertRedirects(resp, f"{reverse('accounts:login')}?next={reverse('accounts:dashboard')}")
+
+    def test_successful_login_before_limit_is_not_blocked(self):
+        self.client.post(self.login_url, {'username': 'miembra2', 'password': 'incorrecta'})
+        resp = self.client.post(self.login_url, {
+            'username': 'miembra2', 'password': 'ClaveSegura123!',
+        })
+        self.assertRedirects(resp, reverse('accounts:dashboard'))
 
 
 class PasswordResetTests(TestCase):
