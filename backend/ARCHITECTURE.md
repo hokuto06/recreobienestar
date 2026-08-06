@@ -1,77 +1,84 @@
 # Recreo Bienestar — Backend Architecture
 
-Status snapshot as of Phase 2b (public auth, member dashboard, real
-membership access control, plus a production-readiness audit). Companion
+Status snapshot as of Phase 2.5 (fully isolated production stack — own
+nginx, own networks, sole public frontend on this EC2 for now). Companion
 docs: `deploy/PHASE1_DELIVERABLES.md`, `deploy/PHASE2_DELIVERABLES.md`,
-`deploy/PHASE2B_DELIVERABLES.md`. This file is the living reference; the
-phase docs are point-in-time delivery records.
+`deploy/PHASE2B_DELIVERABLES.md`, `deploy/PHASE2_5_DELIVERABLES.md`. This
+file is the living reference; the phase docs are point-in-time delivery
+records.
 
 ## 1. System overview
 
-Recreo Bienestar is a Django backend serving three things behind the same
-nginx reverse proxy that already serves the static marketing site and
-several unrelated client sites on one shared EC2 host: Django Admin
-(Carla's content management), a read-only public API, and now a full
-public member experience (registration, login, dashboard, video
-library/detail with real membership-gated access). Payments are still
-explicitly out of scope.
+Recreo Bienestar is now a **fully self-contained production stack**:
+`recreo-nginx` + `recreo-django` + `recreo-db`, with no dependency on
+`nginx-flask-prod`'s containers or Docker network. It serves Django Admin
+(Carla's content management), a read-only public API, and the full public
+member experience (registration, login, dashboard, video library/detail
+with real membership-gated access) — all live at
+`https://recreobienestar.com`.
 
 ```mermaid
 flowchart LR
-    Visitor[Visitor browser] -->|HTTPS| NGINX[nginx-proxy\nexisting, shared]
-    Carla[Carla] -->|HTTPS /gestion/ - pending| NGINX
-    NGINX -->|"/ (static files)"| Static[recreobienestar static site\nunchanged]
-    NGINX -.->|"/gestion/ /api/ /registro/ /ingresar/\n/mi-cuenta/ /videoteca/ /videos/... - pending"| Django[recreo-django]
+    Visitor[Visitor browser] -->|HTTPS :80/:443| RN[recreo-nginx]
+    Carla[Carla] -->|HTTPS /gestion/| RN
+    RN -->|"/ (static files, bundled in this stack)"| Static[recreobienestar static site]
+    RN -->|"/gestion/ /api/ /registro/ /ingresar/\n/mi-cuenta/ /videoteca/ /videos/..."| Django[recreo-django]
     Django --> DB[(recreo-db\nPostgreSQL 16)]
 ```
 
-Dotted lines mark routes that are built, tested, and verified against the
-live container but **not yet reachable publicly** — see §12.
+**Phase 2.5 also made this the sole public site on the EC2 instance**, by
+explicit decision: `nginx-flask-prod`'s `nginx-proxy` was stopped (not
+removed) to free ports 80/443. `jeref.com.ar`, `estebanmartins.com.ar`,
+and `silviorodriguez.com.ar` (all sharing this box/IP) are consequently
+offline until migrated to their own infrastructure later — a deliberate,
+approved tradeoff, not a side effect. See §12 for the reasoning and §18
+for rollback.
 
 ## 2. Docker architecture
 
 Recreo Bienestar is its own Compose project (`recreo-bienestar-backend`),
-deliberately **not** merged into the existing `nginx-flask-prod`
-`docker-compose.yml`. It joins that stack's network as an external
-dependency so nginx can reach it, without either project needing to know
-about the other's internals.
+with **no network, container, or file dependency on `nginx-flask-prod`
+except one deliberate, read-only exception**: the Let's Encrypt
+certificate and ACME webroot (§14) — kept because the cert is a live,
+renewed credential, not static content that can simply be copied once.
 
 ```mermaid
 flowchart TB
-    subgraph "nginx-flask-prod (existing, unmodified)"
-        NGINX[nginx-proxy]
-        FLASK[flask-prod]
-        CERTBOT[certbot]
-        APIold[django-api\nintentionally stopped]
-        BLOG[blog-front\nintentionally stopped]
+    subgraph "nginx-flask-prod (stopped, not removed — Phase 2.5)"
+        NGINX[nginx-proxy — Exited]
+        FLASK[flask-prod — still running, unreachable]
+        CERTBOT[certbot — still running, unreachable]
     end
-    subgraph "recreo-bienestar-backend (new, isolated project)"
+    subgraph "recreo-bienestar-backend (fully isolated stack)"
+        RN[recreo-nginx\nowns host ports 80/443]
         DJ[recreo-django\ngunicorn :8100]
         PG[(recreo-db\npostgres:16-alpine)]
     end
-    NET1{{nginx-flask-prod_default\nexternal network}}
-    NET2{{recreo_internal\nprivate bridge}}
+    NET1{{recreo_public\nbridge}}
+    NET2{{recreo_internal\nbridge}}
+    HOSTFS[/host: nginx-flask-prod/letsencrypt\n+ certbot/www — read-only mount/]
 
-    NGINX --- NET1
-    FLASK --- NET1
+    RN --- NET1
     DJ --- NET1
     DJ --- NET2
     PG --- NET2
+    RN -.->|ro mount| HOSTFS
 ```
 
-No new container publishes a host port. `recreo-db` is reachable only from
-`recreo-django` on `recreo_internal`; `recreo-django` is reachable only
-from `nginx-proxy` on the shared network (once routing is applied — see
-§12).
+Only `recreo-nginx` publishes host ports. `recreo-db` is reachable only
+from `recreo-django` on `recreo_internal`; `recreo-django` is reachable
+only from `recreo-nginx` on `recreo_public`.
 
 ## 3. Container and network relationships
 
 | Container | Image | Networks | Published ports | Notes |
 |---|---|---|---|---|
-| `recreo-django` | built from `backend/Dockerfile` (python:3.11-slim) | `recreo_internal`, `nginx-flask-prod_default` | none | gunicorn, 1 worker/2 threads (memory-sized), WhiteNoise serves static/media |
+| `recreo-nginx` | `nginx:latest` | `recreo_public` | **80, 443** | serves the static site + reverse-proxies Django; see §11 for config specifics |
+| `recreo-django` | built from `backend/Dockerfile` (python:3.11-slim) | `recreo_internal`, `recreo_public` | none | gunicorn, 1 worker/2 threads (memory-sized), WhiteNoise serves static/media |
 | `recreo-db` | `postgres:16-alpine` | `recreo_internal` only | none | `pg_isready` healthcheck, named volume |
-| `nginx-proxy` | existing | `nginx-flask-prod_default` | 80, 443 | unmodified |
-| `django-api`, `blog-front` | existing | `nginx-flask-prod_default` | — | **intentionally stopped**, not part of this project |
+| `nginx-proxy` (nginx-flask-prod) | existing | `nginx-flask-prod_default` | none (stopped) | **stopped, not removed** — freed 80/443 for `recreo-nginx` |
+| `flask-prod`, `certbot` (nginx-flask-prod) | existing | `nginx-flask-prod_default` | none | still running but unreachable (no host port, no front door) |
+| `django-api`, `blog-front` | existing | — | — | still absent (intentionally stopped since Phase 2), untouched by this phase |
 
 ## 4. PostgreSQL persistence model
 
@@ -247,9 +254,8 @@ re-query the user's subscriptions individually (see §17).
 
 ## 8. Django Admin responsibilities
 
-Carla's entire workflow today. Reachable at `/gestion/` once nginx routing
-lands (§12); currently only reachable directly on the server (not
-publicly). Per model:
+Carla's entire workflow today. **Publicly reachable at
+`https://recreobienestar.com/gestion/`** as of Phase 2.5 (§12). Per model:
 
 - **Category / Program**: create/edit, active toggle, drag-free manual
   `display_order` (list-editable), bulk activate/deactivate.
@@ -269,8 +275,8 @@ Django staff auth (see §10).
 
 ## 9. REST API endpoints
 
-All under `/api/` (routing to nginx pending — see §12; reachable directly
-on the server today). Every endpoint is **read-only**: list/retrieve
+All under `/api/`, **publicly live at `https://recreobienestar.com/api/`**
+as of Phase 2.5 (§12). Every endpoint is **read-only**: list/retrieve
 handlers only exist, so POST/PUT/PATCH/DELETE return 405 everywhere — there
 is no write path to secure because none was built.
 
@@ -309,40 +315,80 @@ origin appears later).
 
 | Component | Status |
 |---|---|
+| `recreo-nginx` | **live on ports 80/443**, healthy, serving all routes |
 | `recreo-django` | running, healthy, all Phase 2b + audit fixes deployed |
-| `recreo-db` | running, healthy, all migrations applied, never recreated across any redeploy in this project's history |
-| Django Admin (`/gestion/`) | working — verified directly against the container; **not publicly routed** |
-| REST API (`/api/...`) | working, membership-gated — verified directly against the container; **not publicly routed** |
-| Public auth + dashboard + video library/detail | working — verified end-to-end directly against the container (register/login/dashboard/library/detail/logout); **not publicly routed** |
-| Static site (`/`) | untouched, verified live over HTTPS |
-| `django-api` / `blog-front` | intentionally stopped (memory headroom), untouched |
-| nginx routing | prepared for the full route set, **not applied** (§12) |
+| `recreo-db` | running, healthy, all migrations applied, never recreated across any redeploy or cutover in this project's history |
+| `https://recreobienestar.com` and `https://www.recreobienestar.com` | **publicly live** — verified from the public internet |
+| Django Admin (`/gestion/`), REST API (`/api/...`), public auth + dashboard + video library/detail | **all publicly live**, verified via real HTTPS requests to the domain, not just against the container directly |
+| Static site (`/`) | **publicly live**, unchanged content, verified over HTTPS |
+| `django-api` / `blog-front` | still absent (intentionally stopped since Phase 2), untouched |
+| `nginx-proxy` (nginx-flask-prod) | **stopped** (Phase 2.5 cutover), container/volumes/image intact, not removed |
 
-## 12. Nginx routing — still pending
+## 12. Nginx routing — applied (Phase 2.5)
 
-`backend/deploy/recreobienestar.conf.proposed` adds `location` blocks for
-`/gestion/`, `/api/`, the public auth/dashboard/library paths (via one
-regex location), and `/static/`/`/media/` (with `^~` — needed so they
-aren't shadowed by the static site's own `\.(css|js|...)$` regex block,
-a real routing bug caught and fixed while drafting this) to the existing
-`recreobienestar.com` server block, before its catch-all `location /`. It
-does not touch the static site's routing, `ssl_certificate` lines, or any
-other domain's config.
+`backend/nginx/conf.d/recreobienestar.conf` is `recreo-nginx`'s own
+config — no longer a proposal grafted onto `nginx-flask-prod`'s file.
+Serves `/` (static site, bundled read-only into this stack's image via
+`nginx/static-root/`), `/gestion/`, `/api/`, the public auth/dashboard/
+library paths (one regex location), and `/static/`/`/media/` (with `^~`,
+needed so they aren't shadowed by the `\.(css|js|...)$` regex block).
 
-**Blocked by a pre-existing, unrelated issue**, not by this config:
-`nginx -t` fails on `nginx-flask-prod/nginx/conf.d/default.conf` (a
-different file, for `estebanmartins.com.ar`), because it references the
-`blog-front` upstream by container name and `blog-front` is intentionally
-stopped — Docker's embedded DNS won't resolve a stopped container, and
-nginx refuses to reload the *entire* config file set until every
-referenced upstream resolves. This was confirmed by restoring the
-untouched original `recreobienestar.conf` and reproducing the identical
-`nginx -t` failure.
+**Two real bugs were found and fixed during pre-cutover testing on
+temporary ports 8088/8444** (not just confirmed working — see
+`deploy/PHASE2_5_DELIVERABLES.md` for the full debugging trail):
+1. Every `proxy_pass` used a variable (`$django_upstream`) to get
+   request-time DNS resolution (see the resilience note below) — but
+   nginx does NOT do prefix substitution when `proxy_pass` targets a
+   variable; it was silently truncating every request to the literal path
+   written in the directive (`/static/<file>` → bare `/static/`). Fixed by
+   removing the trailing path everywhere, since Django's own URL patterns
+   already expect the full original path unchanged.
+2. `/static/` and `/media/` were missing `X-Forwarded-Proto`, so Django's
+   `SECURE_SSL_REDIRECT` self-redirected every static asset request.
 
-Unblocks when either: `blog-front` comes back up, or `default.conf` is
-changed to resolve upstreams dynamically (a `resolver` directive + variable
-in `proxy_pass`) — the second option touches a file outside this project's
-scope and needs explicit sign-off first.
+**Built resiliently against the exact failure that blocked Phase 2/2b**:
+`resolver 127.0.0.11 valid=10s;` + a variable in `proxy_pass` means nginx
+resolves `recreo-django` at *request time*, not at config-load/reload
+time. Unlike `nginx-flask-prod/nginx/default.conf` (which still hard-fails
+`nginx -t` if `blog-front` is stopped — confirmed still true, unrelated to
+this stack), `recreo-nginx` starts and reloads successfully even if
+`recreo-django` is briefly down (e.g. mid-deploy) — real requests during
+that window get a 502, not a refusal to start at all.
+
+**Cutover (Phase 2.5)**: `nginx-proxy` (nginx-flask-prod) was stopped to
+free ports 80/443, by explicit decision — `recreobienestar.com` is now the
+sole public site on this EC2 instance; `jeref.com.ar`,
+`estebanmartins.com.ar`, and `silviorodriguez.com.ar` (all sharing this
+box) are offline until migrated separately. See §18 for rollback.
+
+**Certificate mounting and renewal flow** (inspected in full during
+Phase 2.5 — this is not new automation, just documentation of what was
+already true):
+- The cert is issued into a **custom, non-default certbot config
+  directory**: `/home/ubuntu/nginx-flask-prod/letsencrypt` (see
+  `renewal/recreobienestar.com.conf`'s `config_dir` line) — NOT the host's
+  real `/etc/letsencrypt`, which has no record of this domain at all.
+- `recreo-nginx` mounts that exact directory read-only at
+  `/etc/letsencrypt`, plus the matching webroot
+  (`/home/ubuntu/nginx-flask-prod/certbot/www`) read-only at
+  `/var/www/certbot`, so the ACME HTTP-01 challenge continues to be
+  servable from the same location renewal already targets.
+- **Finding, pre-existing and unrelated to this phase**: the host's
+  automatic `certbot.timer`/`certbot.service` (systemd, twice daily) only
+  renews certs under the *default* `/etc/letsencrypt` — it has no
+  knowledge of this custom config-dir cert. This cert has **no automatic
+  renewal today** and will simply expire 2026-11-03 unless renewed
+  manually (or a new, separately-scheduled job is set up — not done here,
+  per "stop and explain before changing anything risky").
+- **The exact, safe manual renewal command**, unchanged by this phase:
+  ```bash
+  sudo certbot renew --config-dir /home/ubuntu/nginx-flask-prod/letsencrypt \
+    --deploy-hook "docker exec recreo-nginx nginx -s reload"
+  ```
+  The `--deploy-hook` reload is the only new addition Phase 2.5 requires —
+  previously it would have needed to reload `nginx-proxy` instead.
+- No certs, keys, or renewal config were copied into git at any point —
+  the mount is the only mechanism, always read-only.
 
 ## 13. Environment variables
 
@@ -402,18 +448,24 @@ Both tested end-to-end during Phase 2 (dump created, contents listed via
 
 - **t2.micro, 954MB RAM, 0 swap.** Baseline OS/daemon overhead
   (`dockerd`+`containerd`+`fail2ban`+`snapd`+`amazon-ssm-agent`) alone is
-  ~240MB. `django-api`/`blog-front` had to be stopped to make room for
-  `recreo-django`/`recreo-db` during development — this is why nginx
-  routing can't be finished without either bringing them back or fixing
-  the `default.conf` coupling (§12).
-- **Recommendation**: t3.small (2GB RAM) before running the full original
-  container set alongside Recreo Bienestar long-term; a small swap file
-  (1–2GB) is also a cheap safety net regardless of instance size. Neither
-  has been applied — both are host-level changes outside this phase.
-- **Disk**: ~3.8GB free of 11GB at last check — enough for now, worth
+  ~240MB.
+- **Recommendation**: t3.small (2GB RAM) before bringing `jeref.com.ar`,
+  `estebanmartins.com.ar`, or `silviorodriguez.com.ar` back online
+  alongside Recreo Bienestar; a small swap file (1–2GB) is also a cheap
+  safety net regardless of instance size. Neither has been applied — both
+  are host-level changes outside this phase.
+- **Disk**: ~3.7GB free of 11GB at last check — enough for now, worth
   watching as more container images/log volume accumulate.
-- **Single point of failure**: one EC2 instance serves this and several
-  unrelated client sites; no HA, no staging environment.
+- **Single point of failure, now more so**: as of Phase 2.5,
+  `recreobienestar.com` is the *only* public site this EC2 instance
+  serves — `jeref.com.ar`, `estebanmartins.com.ar`, and
+  `silviorodriguez.com.ar` are offline (§12), by explicit decision,
+  until migrated to their own infrastructure. No HA, no staging
+  environment for any of them.
+- **Cert renewal gap** (§12): `recreobienestar.com`'s certificate has no
+  automatic renewal — a pre-existing condition, not introduced by this
+  phase, but now more consequential since this cert is the only thing
+  keeping the box's sole public site on HTTPS. Expires 2026-11-03.
 
 ## 16. Future phases (not started)
 
@@ -474,20 +526,31 @@ bug in the first attempt was itself caught by the test written for it).
 
 ## 18. Rollback procedures
 
-- **Server containers**: `cd /home/ubuntu/recreo-bienestar-backend &&
-  docker compose down -v` — removes `recreo-django`, `recreo-db`, their
-  networks and volumes (⚠️ `-v` deletes the database — take a backup first,
-  §14). Does not touch `nginx-flask-prod` in any way.
+**Cutover rollback (Phase 2.5 — recreo-nginx on 80/443)**:
+```bash
+sudo docker stop recreo-nginx
+sudo docker start nginx-proxy
+curl -s -o /dev/null -w '%{http_code}\n' https://recreobienestar.com/   # confirm restored
+```
+Nothing destructive either way: `nginx-proxy` was `docker stop`'d, never
+`rm`'d — container, volumes, and image are all intact and this brings it
+back exactly as it was. `recreo-nginx` can then be torn down
+(`docker compose down`, no `-v`) with zero data loss, or just left stopped
+alongside it.
+
+- **Server containers (full stack)**: `cd /home/ubuntu/recreo-bienestar-backend &&
+  docker compose down -v` — removes `recreo-nginx`, `recreo-django`,
+  `recreo-db`, their networks and volumes (⚠️ `-v` deletes the database —
+  take a backup first, §14). Does not touch `nginx-flask-prod` in any way.
 - **Migration rollback**: `docker exec recreo-django python manage.py
   migrate accounts 0001` reverts the email unique index (and, further,
   `migrate accounts zero` removes Profile entirely — no other app depends
   on it). `migrate catalog 0001` / `migrate memberships 0001` drop the new
   indexes only, no data loss either way.
-- **nginx**: nothing has been applied yet (§12), so there's nothing to roll
-  back. If it's later applied and needs reverting: restore
-  `nginx/conf.d/recreobienestar.conf` from `nginx-flask-prod` git history
-  (or from the timestamped `.bak-*` file left alongside it) and re-run
-  `nginx -t` before reloading.
+- **nginx config only**: `recreo-nginx`'s config lives entirely in this
+  repo now (`nginx/conf.d/`, `nginx/snippets/`) — revert via normal
+  `git checkout` of this repo, then `docker compose restart recreo-nginx`.
+  `nginx-flask-prod`'s own files were never touched by Phase 2.5.
 - **This repo**: `git checkout main` — `feature/django-backend` and the
   checkpoint tag `checkpoint-before-django-backend-20260805` stay available
   for diffing or resuming; nothing has been merged into `main`.
@@ -519,4 +582,15 @@ docker exec -it recreo-django python manage.py createsuperuser
 # Check container/DB health
 docker ps --format 'table {{.Names}}\t{{.Status}}'
 docker exec recreo-db pg_isready -U recreo_admin -d recreo_bienestar
+
+# Redeploy recreo-nginx after an nginx/ config change (validate first!)
+docker compose exec recreo-nginx nginx -t
+docker compose up -d recreo-nginx        # or: docker exec recreo-nginx nginx -s reload
+
+# Test nginx changes on temp ports before touching live 80/443
+docker compose -f docker-compose.yml -f docker-compose.tmpports.yml up -d recreo-nginx
+
+# Renew the certificate (see §12 — no automatic renewal exists yet)
+sudo certbot renew --config-dir /home/ubuntu/nginx-flask-prod/letsencrypt \
+  --deploy-hook "docker exec recreo-nginx nginx -s reload"
 ```

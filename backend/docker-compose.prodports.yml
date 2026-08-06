@@ -1,0 +1,14 @@
+# Production cutover ONLY — claims host ports 80/443. Do not apply until:
+#   1. docker-compose.tmpports.yml testing has passed in full (see
+#      deploy/PHASE2_5_DELIVERABLES.md's pre-cutover checklist), AND
+#   2. explicit approval has been given, AND
+#   3. nginx-flask-prod's nginx-proxy has been stopped to free the ports
+#      (docker stop nginx-proxy — container/volumes/image NOT removed).
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prodports.yml up -d recreo-nginx
+services:
+  recreo-nginx:
+    ports:
+      - "80:80"
+      - "443:443"

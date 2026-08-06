@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Recreo Bienestar — hoja de estilos principal
+   Recreo y Bienestar — hoja de estilos principal
    Plataforma de bienestar — demostración
    Paleta cálida, tipografía elegante, componentes redondeados y contenidos.
    Sin dependencias externas (sin CDN, sin frameworks).
@@ -51,9 +51,9 @@ h1, h2, h3, h4, p, figure { margin: 0; }
   --color-primary: #AD5A41;
   --color-primary-dark: #8F4936;
   --color-primary-light: #D98F73;
-  --color-secondary: #5E6B54;
+  --color-secondary: #7E8F70;
   --color-secondary-light: #E3E9DB;
-  --color-gold: #7E5F2C;
+  --color-gold: #B5893F;
   --color-gold-light: #F1E4C5;
   --color-border: #E8DCCE;
   --color-locked: #6E625B;
@@ -147,6 +147,16 @@ p.lede { font-size: 1.15rem; color: var(--color-text-muted); }
 .skip-link:focus {
   left: var(--space-3);
   top: var(--space-3);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
 }
 
 :focus-visible {
@@ -391,12 +401,13 @@ p.lede { font-size: 1.15rem; color: var(--color-text-muted); }
 }
 .grid-3 { grid-template-columns: repeat(3, 1fr); }
 .grid-4 { grid-template-columns: repeat(4, 1fr); }
+.grid-2 { grid-template-columns: repeat(2, 1fr); }
 @media (max-width: 980px) {
   .grid-4 { grid-template-columns: repeat(2, 1fr); }
   .grid-3 { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 620px) {
-  .grid-4, .grid-3 { grid-template-columns: 1fr; }
+  .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; }
 }
 
 .card {
@@ -490,8 +501,17 @@ p.lede { font-size: 1.15rem; color: var(--color-text-muted); }
   border-radius: var(--radius-pill);
 }
 .tag-soon { background: var(--color-gold-light); color: var(--color-gold); }
+.tag-free { background: var(--color-secondary-light); color: var(--color-secondary); }
+.tag-locked { background: #ECE6DE; color: var(--color-locked); }
+.tag-demo { background: var(--color-bg-alt); color: var(--color-text-muted); border: 1px dashed var(--color-border); }
 
 /* ---------- Videoteca ---------- */
+.video-tabs {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-5);
+}
 .video-tab {
   padding: 0.55rem 1.1rem;
   border-radius: var(--radius-pill);
@@ -746,7 +766,7 @@ p.lede { font-size: 1.15rem; color: var(--color-text-muted); }
 }
 @media (max-width: 760px) { .footer-grid { grid-template-columns: repeat(2, 1fr); } }
 
-.footer-col h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: var(--space-3); color: var(--color-text-muted); }
+.footer-col h4 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: var(--space-3); color: var(--color-text-muted); }
 .footer-col ul { display: flex; flex-direction: column; gap: 0.55rem; }
 .footer-col a { font-size: 0.92rem; color: var(--color-text); }
 .footer-col a:hover { color: var(--color-primary); }

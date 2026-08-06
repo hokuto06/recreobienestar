@@ -1,0 +1,15 @@
+# Pre-cutover testing ONLY. Publishes recreo-nginx on non-standard ports so
+# the full stack can be validated end-to-end without touching the live
+# ports 80/443 (still owned by nginx-flask-prod's nginx-proxy).
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.tmpports.yml up -d recreo-nginx
+#
+# Remove/stop before applying docker-compose.prodports.yml — a container
+# can't publish the same host port twice, but more importantly, running
+# both is only ever meant to happen transiently during testing.
+services:
+  recreo-nginx:
+    ports:
+      - "8088:80"
+      - "8444:443"

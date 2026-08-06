@@ -1,5 +1,5 @@
 /*!
- * Recreo Bienestar — comportamiento del sitio (demostración)
+ * Recreo y Bienestar — comportamiento del sitio (demostración)
  * Vanilla JS, sin dependencias externas.
  * No implementa autenticación real, pagos ni persistencia de datos.
  */
@@ -62,7 +62,7 @@
 
   function loadVideo(facade) {
     var videoId = facade.getAttribute('data-video-id');
-    var title = facade.getAttribute('data-video-title') || 'Video de Recreo Bienestar';
+    var title = facade.getAttribute('data-video-title') || 'Video de Recreo y Bienestar';
     if (!videoId) { return; }
     var iframe = document.createElement('iframe');
     iframe.setAttribute('src', 'https://www.youtube-nocookie.com/embed/' + videoId + '?rel=0&modestbranding=1&playsinline=1&autoplay=1');
@@ -123,7 +123,8 @@
   if (contactForm) {
     contactForm.addEventListener('submit', function (evt) {
       evt.preventDefault();
-      var successMsg = contactForm.querySelector('[data-form-success]');
+      var successMsg = contactForm.querySelector('[data-form-success]') ||
+        document.querySelector('[data-form-success]');
       if (successMsg) {
         successMsg.classList.add('is-visible');
         successMsg.setAttribute('role', 'status');

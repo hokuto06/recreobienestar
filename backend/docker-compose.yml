@@ -1,30 +1,30 @@
-# Recreo Bienestar — Django backend/admin + dedicated Postgres
+# Recreo Bienestar — fully isolated production stack
 #
-# Deliberately its own Compose project, NOT a merge into
-# nginx-flask-prod/docker-compose.yml. It joins the existing nginx-proxy's
-# network as an *external* network so nginx can reach `recreo-django` by
-# container name, without touching any existing service, container, or
-# network definition in that stack.
+# Phase 2.5: recreo-nginx replaces nginx-flask-prod's nginx-proxy as the
+# public entry point for recreobienestar.com. This project no longer
+# depends on nginx-flask-prod's Docker network, containers, or compose
+# file AT ALL — the only remaining coupling is deliberate and read-only:
+# the Let's Encrypt certificate and ACME webroot, mounted from their
+# existing host paths (see LETSENCRYPT_DIR / CERTBOT_WEBROOT_DIR below).
+# That coupling exists because the cert is a live, renewed credential —
+# copying it would go stale in ~90 days. See ARCHITECTURE.md for the full
+# renewal flow and why it's structured this way.
 #
-# Neither service publishes a host port: recreo-db is reachable only from
-# recreo-django (internal network), and recreo-django is reachable only
-# from nginx-proxy (shared external network). Nothing here is exposed
-# directly to the internet.
+# Only recreo-nginx publishes host ports (80/443). recreo-django and
+# recreo-db are unreachable from outside this stack's own networks.
 
 volumes:
   recreo_db_data:
   recreo_media:
 
 networks:
+  # recreo-django <-> recreo-db only. No other container, in this project
+  # or any other, is attached to this network.
   recreo_internal:
     driver: bridge
-  # Must already exist (created by the nginx-flask-prod stack). Verify with
-  # `docker network ls` before `docker compose up` — do not let Compose
-  # create it, or nginx-proxy and this stack will end up on two different
-  # networks with the same name.
-  nginx_proxy_net:
-    external: true
-    name: nginx-flask-prod_default
+  # recreo-nginx <-> recreo-django only.
+  recreo_public:
+    driver: bridge
 
 services:
   recreo-db:
@@ -64,4 +64,34 @@ services:
       - recreo_media:/app/media
     networks:
       - recreo_internal
-      - nginx_proxy_net
+      - recreo_public
+    # No `ports:` — reachable only from recreo-nginx, on recreo_public,
+    # by container name (recreo-django:8100). Never exposed to the host.
+
+  recreo-nginx:
+    image: nginx:latest
+    container_name: recreo-nginx
+    restart: unless-stopped
+    depends_on:
+      - recreo-django
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/snippets:/etc/nginx/snippets:ro
+      - ./nginx/static-root:/usr/share/nginx/html:ro
+      - ./nginx/logs:/var/log/nginx
+      # The one deliberate external dependency — see the header comment.
+      # Both paths are absolute host paths outside this project, owned by
+      # the existing certbot renewal flow; mounted read-only.
+      - ${LETSENCRYPT_DIR:-/home/ubuntu/nginx-flask-prod/letsencrypt}:/etc/letsencrypt:ro
+      - ${CERTBOT_WEBROOT_DIR:-/home/ubuntu/nginx-flask-prod/certbot/www}:/var/www/certbot:ro
+    networks:
+      - recreo_public
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    # Ports are intentionally NOT declared here. See:
+    #   docker-compose.tmpports.yml — temporary 8088/8444 for pre-cutover testing
+    #   docker-compose.prodports.yml — real 80/443, applied only after approval
+    # `docker compose -f docker-compose.yml -f docker-compose.<x>.yml up -d`
