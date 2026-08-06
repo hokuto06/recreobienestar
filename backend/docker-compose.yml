@@ -1,0 +1,67 @@
+# Recreo Bienestar — Django backend/admin + dedicated Postgres
+#
+# Deliberately its own Compose project, NOT a merge into
+# nginx-flask-prod/docker-compose.yml. It joins the existing nginx-proxy's
+# network as an *external* network so nginx can reach `recreo-django` by
+# container name, without touching any existing service, container, or
+# network definition in that stack.
+#
+# Neither service publishes a host port: recreo-db is reachable only from
+# recreo-django (internal network), and recreo-django is reachable only
+# from nginx-proxy (shared external network). Nothing here is exposed
+# directly to the internet.
+
+volumes:
+  recreo_db_data:
+  recreo_media:
+
+networks:
+  recreo_internal:
+    driver: bridge
+  # Must already exist (created by the nginx-flask-prod stack). Verify with
+  # `docker network ls` before `docker compose up` — do not let Compose
+  # create it, or nginx-proxy and this stack will end up on two different
+  # networks with the same name.
+  nginx_proxy_net:
+    external: true
+    name: nginx-flask-prod_default
+
+services:
+  recreo-db:
+    image: postgres:16-alpine
+    container_name: recreo-db
+    restart: unless-stopped
+    # Only the three vars Postgres needs — not the full app .env (which
+    # also holds Django's SECRET_KEY etc). Values still come from .env via
+    # Compose's automatic ${VAR} substitution, they're just not injected as
+    # extra environment into this container wholesale.
+    environment:
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - recreo_db_data:/var/lib/postgresql/data
+    networks:
+      - recreo_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  recreo-django:
+    build: .
+    container_name: recreo-django
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - APP_PORT=8100
+    depends_on:
+      recreo-db:
+        condition: service_healthy
+    volumes:
+      - recreo_media:/app/media
+    networks:
+      - recreo_internal
+      - nginx_proxy_net

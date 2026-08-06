@@ -1,0 +1,11 @@
+.git
+.env
+__pycache__
+*.pyc
+*.pyo
+*.sqlite3
+.venv
+venv
+staticfiles
+media
+*.egg-info

@@ -1,0 +1,110 @@
+#########################################
+# recreobienestar.com – Recreo Bienestar (migrated from jeref.com.ar)
+# HTTPS enabled — cert: /etc/letsencrypt/live/recreobienestar.com/
+# Issued: 2026-08-05  Expires: 2026-11-03
+#########################################
+
+# ── HTTP: ACME challenge + redirect to HTTPS ──────────────────────────────────
+server {
+    listen 80;
+    listen [::]:80;
+    server_name recreobienestar.com www.recreobienestar.com;
+
+    # Let's Encrypt webroot challenge (required for cert renewal)
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://recreobienestar.com$request_uri;
+    }
+}
+
+# ── HTTPS: www → apex redirect ────────────────────────────────────────────────
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name www.recreobienestar.com;
+
+    ssl_certificate     /etc/letsencrypt/live/recreobienestar.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/recreobienestar.com/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+    ssl_prefer_server_ciphers off;
+
+    return 301 https://recreobienestar.com$request_uri;
+}
+
+# ── HTTPS: canonical apex ─────────────────────────────────────────────────────
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name recreobienestar.com;
+
+    ssl_certificate     /etc/letsencrypt/live/recreobienestar.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/recreobienestar.com/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+    ssl_prefer_server_ciphers off;
+
+    root  /usr/share/nginx/frontend-static/recreobienestar;
+    index index.html;
+
+    access_log /var/log/nginx/recreobienestar.access.log;
+    error_log  /var/log/nginx/recreobienestar.error.log;
+
+    # Full security headers — HSTS active
+    include /etc/nginx/snippets/seguridad.conf;
+
+    # ── ADDED: Django Admin (Carla's content management) ────────────────
+    # recreo-django is on the shared nginx-flask-prod_default network
+    # (see backend/docker-compose.yml). Static/media are served by
+    # WhiteNoise from inside the container under this same prefix, so no
+    # extra nginx volume mount is required.
+    location /gestion/ {
+        proxy_pass http://recreo-django:8100/gestion/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_redirect off;
+        client_max_body_size 20M;
+    }
+
+    # Read-only public API (categories/programs/videos/plans). Same
+    # container, same network — see catalog/views.py and
+    # memberships/views.py for the read-only guarantee.
+    location /api/ {
+        proxy_pass http://recreo-django:8100/api/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_redirect off;
+    }
+    # ── END ADDED ─────────────────────────────────────────────────────
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location ~* \.(css|js|svg|ico|woff|woff2|ttf|eot)$ {
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    location ~* \.(jpg|jpeg|png|gif|webp)$ {
+        expires 7d;
+        add_header Cache-Control "public";
+        access_log off;
+    }
+
+    location = /robots.txt {
+        access_log off;
+    }
+
+    location = /sitemap.xml {
+        access_log off;
+    }
+}

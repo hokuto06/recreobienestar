@@ -1,0 +1,22 @@
+"""
+Local-only settings override for running `manage.py check`/`test` on a
+laptop without Postgres or Docker. NEVER used in Docker/production — the
+image's entrypoint always uses config.settings (Postgres).
+
+Usage:
+    DJANGO_SETTINGS_MODULE=config.settings_test_sqlite python manage.py test
+"""
+from .settings import *  # noqa: F401,F403
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',  # noqa: F405
+    }
+}
+
+# The test client makes plain HTTP requests with no X-Forwarded-Proto
+# header (there's no nginx in front of it here), so the production
+# SECURE_SSL_REDIRECT would 301 every single test request. Real
+# production config (config.settings) is untouched.
+SECURE_SSL_REDIRECT = False
