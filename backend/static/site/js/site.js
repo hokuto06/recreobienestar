@@ -45,6 +45,14 @@
     iframe.setAttribute('src', 'https://www.youtube-nocookie.com/embed/' + videoId + '?rel=0&modestbranding=1&playsinline=1');
     iframe.setAttribute('title', title);
     iframe.setAttribute('loading', 'lazy');
+    // SECURITY_AUDIT.md §7: the page's Referrer-Policy reaches the browser
+    // as Django's `same-origin` default (a separate, already-documented
+    // nginx header-inheritance bug — not touched here), which sends
+    // YouTube no referrer at all and is a known trigger for embed error
+    // 153. Setting it explicitly on the iframe itself overrides the page
+    // policy for just this element, matching YouTube's own documented
+    // oEmbed-recommended markup, regardless of the page-level header.
+    iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
     iframe.setAttribute('allow', 'accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture');
     iframe.setAttribute('allowfullscreen', '');
     var frame = facade.closest('.video-detail-frame');
