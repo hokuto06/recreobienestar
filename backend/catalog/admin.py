@@ -126,10 +126,7 @@ class VideoAdmin(admin.ModelAdmin):
 
     @admin.display(description='Miniatura')
     def thumbnail_preview(self, obj):
-        url = obj.thumbnail_url or (
-            f'https://img.youtube.com/vi/{obj.youtube_video_id}/hqdefault.jpg'
-            if obj.youtube_video_id else ''
-        )
+        url = obj.thumbnail_display_url
         if not url:
             return '—'
         return format_html('<img src="{}" style="max-height:120px;border-radius:4px" />', url)

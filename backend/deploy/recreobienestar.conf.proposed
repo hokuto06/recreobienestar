@@ -82,6 +82,33 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_redirect off;
     }
+
+    # Public member auth + dashboard + video library (Phase 2b). Explicit
+    # prefixes, not a catch-all — anything not listed here still falls
+    # through to the static site's `location /` below.
+    location ~ ^/(registro|ingresar|salir|recuperar-clave|mi-cuenta|videoteca|videos)/ {
+        proxy_pass http://recreo-django:8100;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_redirect off;
+    }
+
+    # Static/media for the pages above. `^~` stops nginx from falling
+    # through to the `\.(css|js|...)$` regex block further down, which
+    # would otherwise try to serve these from the static site's own
+    # filesystem root and 404 instead of reaching recreo-django.
+    location ^~ /static/ {
+        proxy_pass http://recreo-django:8100/static/;
+        proxy_set_header Host $host;
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+    }
+    location ^~ /media/ {
+        proxy_pass http://recreo-django:8100/media/;
+        proxy_set_header Host $host;
+    }
     # ── END ADDED ─────────────────────────────────────────────────────
 
     location / {

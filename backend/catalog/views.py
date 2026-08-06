@@ -1,4 +1,7 @@
 from rest_framework import generics, viewsets
+from rest_framework.response import Response
+
+from memberships.services import can_access_video
 
 from .filters import VideoFilter
 from .models import Category, Program, Video
@@ -43,3 +46,35 @@ class VideoViewSet(viewsets.ReadOnlyModelViewSet):
         if self.action == 'retrieve':
             return VideoDetailSerializer
         return VideoListSerializer
+
+    def get_serializer_context(self):
+        """Adds `subscriptions`: the caller's subscriptions, fetched once
+        per request (not once per video) — VideoListSerializer.get_thumbnail
+        passes this straight through to can_access_video. Without it, a
+        paginated list of 20 videos would run 20 separate subscription
+        queries instead of this single one. Only needed for `list` —
+        `retrieve` handles a single video and already resolved access in
+        retrieve() below before the serializer even runs."""
+        context = super().get_serializer_context()
+        if self.action == 'list':
+            request = context.get('request')
+            user = getattr(request, 'user', None) if request else None
+            context['subscriptions'] = (
+                list(user.subscriptions.select_related('plan'))
+                if user is not None and user.is_authenticated else []
+            )
+        return context
+
+    def retrieve(self, request, *args, **kwargs):
+        """Mirrors catalog.public_views.video_detail's rule exactly: check
+        access BEFORE building a response that would include
+        youtube_video_id, so a locked video's ID never reaches this
+        endpoint's output at all — not redacted, not present."""
+        instance = self.get_object()
+        if not can_access_video(request.user, instance):
+            return Response(
+                {'detail': 'No tenés acceso a este video con tu membresía actual.'},
+                status=403,
+            )
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)

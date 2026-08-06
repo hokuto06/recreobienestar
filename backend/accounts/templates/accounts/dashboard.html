@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Mi cuenta | Recreo Bienestar{% endblock %}
+{% block content %}
+<header class="member-header">
+  <div class="container member-bar">
+    <a href="/" class="logo">
+      <span class="logo-mark" aria-hidden="true">R</span>
+      Recreo Bienestar
+    </a>
+    <div class="member-user">
+      <div class="testimonial-avatar" aria-hidden="true">{{ profile.name_for_display|first|upper }}</div>
+      <div>
+        <div class="name">Hola, {{ profile.name_for_display }}</div>
+        <div class="plan-label">
+          {% if subscription %}{{ subscription.plan.name }}{% else %}Plan gratuito{% endif %}
+        </div>
+      </div>
+      <a class="btn btn-ghost btn-sm" href="{% url 'accounts:profile_edit' %}">Editar perfil</a>
+    </div>
+  </div>
+</header>
+
+<section class="container member-hero">
+  <span class="eyebrow">Tu espacio</span>
+  <h1>Bienvenida, {{ profile.name_for_display }}</h1>
+  <p class="lede" style="margin-top:0.5rem">Este es el resumen de tu cuenta y tu videoteca disponible.</p>
+</section>
+
+<section class="container section--tight">
+  <div class="dashboard-grid">
+    <div>
+      <div class="video-section-title">
+        <h2>Disponibles para vos</h2>
+      </div>
+      {% if available_videos %}
+        <div class="grid grid-3">
+          {% for video in available_videos %}
+            {% include "catalog/partials/_video_card.html" with video=video unlocked=True %}
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state">
+          <h3>Todavía no tenés videos disponibles</h3>
+          <p>En cuanto se publiquen videos gratuitos o de tu plan, van a aparecer acá.</p>
+        </div>
+      {% endif %}
+
+      {% if locked_videos %}
+        <div class="video-section-title" style="margin-top:var(--space-6)">
+          <h2>Contenido bloqueado</h2>
+        </div>
+        <div class="grid grid-3">
+          {% for video in locked_videos %}
+            {% include "catalog/partials/_video_card.html" with video=video unlocked=False %}
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+
+    <aside>
+      <div class="card">
+        <span class="badge-preview">
+          <svg width="13" height="13"><use href="#icon-shield"></use></svg>
+          Estado de membresía
+        </span>
+
+        {% if subscription %}
+          <h3 style="margin-top:0.6rem">{{ subscription.plan.name }}</h3>
+          <p>
+            <span class="status-pill {% if membership_is_active %}is-active{% else %}is-inactive{% endif %}">
+              {% if membership_is_active %}Activa{% else %}{{ subscription.get_status_display }}{% endif %}
+            </span>
+          </p>
+          {% if subscription.ends_at %}
+            <p style="color:var(--color-text-muted);font-size:0.9rem;margin-top:0.5rem">
+              {% if membership_is_active %}Vence el {% else %}Venció el {% endif %}
+              {{ subscription.ends_at|date:"d/m/Y" }}
+            </p>
+          {% endif %}
+        {% else %}
+          <h3 style="margin-top:0.6rem">Plan gratuito</h3>
+          <p style="color:var(--color-text-muted);font-size:0.9rem">Todavía no tenés una membresía activa.</p>
+        {% endif %}
+
+        {% if not membership_is_active %}
+          <a class="btn btn-primary btn-block" href="/#membresias" style="margin-top:1rem">
+            {% if subscription %}Renovar membresía{% else %}Ver planes de membresía{% endif %}
+          </a>
+        {% endif %}
+      </div>
+
+      {% if featured_videos %}
+        <div class="card" style="margin-top:var(--space-4)">
+          <h3>Destacados</h3>
+          {% for video in featured_videos %}
+            <p style="margin-top:0.5rem"><a href="{% url 'catalog:video_detail' video.slug %}">{{ video.title }}</a></p>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% if free_videos %}
+        <div class="card" style="margin-top:var(--space-4)">
+          <h3>Gratuitos</h3>
+          {% for video in free_videos %}
+            <p style="margin-top:0.5rem"><a href="{% url 'catalog:video_detail' video.slug %}">{{ video.title }}</a></p>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </aside>
+  </div>
+
+  {% if recent_videos %}
+    <div class="video-section-title" style="margin-top:var(--space-8)">
+      <h2>Recién publicados</h2>
+      <a href="{% url 'catalog:video_library' %}">Ver toda la videoteca →</a>
+    </div>
+    <div class="grid grid-4">
+      {% for video in recent_videos %}
+        {% include "catalog/partials/_video_card.html" with video=video unlocked=video.unlocked %}
+      {% endfor %}
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

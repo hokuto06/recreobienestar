@@ -107,10 +107,20 @@ class AccessControlTests(TestCase):
         video = self._video(access_level='plan1')
         self.assertFalse(can_access_video(self.user, video))
 
-    def test_cancelled_denies_access(self):
+    def test_cancelled_retains_access_until_end_date(self):
+        # Cancelling stops future renewal, but a member who already paid
+        # for the current period keeps access until ends_at passes.
         Subscription.objects.create(
             user=self.user, plan=self.plan1, status='cancelled',
             ends_at=self.now + timedelta(days=10), cancelled_at=self.now,
+        )
+        video = self._video(access_level='plan1')
+        self.assertTrue(can_access_video(self.user, video))
+
+    def test_cancelled_denies_access_after_end_date(self):
+        Subscription.objects.create(
+            user=self.user, plan=self.plan1, status='cancelled',
+            ends_at=self.now - timedelta(days=1), cancelled_at=self.now - timedelta(days=2),
         )
         video = self._video(access_level='plan1')
         self.assertFalse(can_access_video(self.user, video))
@@ -125,6 +135,21 @@ class AccessControlTests(TestCase):
     def test_anonymous_user_denied_paid_video(self):
         video = self._video(access_level='plan1')
         self.assertFalse(can_access_video(None, video))
+
+    def test_inactive_plan_denies_access(self):
+        self.plan1.is_active = False
+        self.plan1.save()
+        Subscription.objects.create(
+            user=self.user, plan=self.plan1, status='active',
+            ends_at=self.now + timedelta(days=10),
+        )
+        video = self._video(access_level='plan1')
+        self.assertFalse(can_access_video(self.user, video))
+
+    def test_staff_bypasses_everything_including_unpublished(self):
+        staff_user = User.objects.create_user(username='staffer', password='x', is_staff=True)
+        video = self._video(access_level='plan2', is_published=False)
+        self.assertTrue(can_access_video(staff_user, video))
 
 
 class SubscriptionModelTests(TestCase):

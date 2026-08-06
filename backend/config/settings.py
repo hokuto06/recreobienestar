@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'django_filters',
+    'accounts',
     'catalog',
     'memberships',
 ]
@@ -61,7 +62,10 @@ ROOT_URLCONF = 'config.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        # Project-level templates (base.html shared by every app) live in
+        # backend/templates/; each app's own templates are still found via
+        # APP_DIRS below.
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -106,35 +110,71 @@ USE_I18N = True
 USE_TZ = True
 
 # ── Static & media ───────────────────────────────────────────────────────
-# Served directly by WhiteNoise from within the app container, under the
-# same admin path prefix — no extra nginx volume mounts required.
-STATIC_URL = f'/{ADMIN_URL}static/'
+# Served directly by WhiteNoise from within the app container. Top-level
+# prefixes now that this container serves public member-facing pages too,
+# not just Django Admin (Phase 1 nested these under /gestion/ — moved back
+# out to /static/ and /media/ here; nginx was never reloaded with the old
+# paths live, see deploy/PHASE2_DELIVERABLES.md, so nothing public depended
+# on the old prefix).
+STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_DIRS = [BASE_DIR / 'static']
 STORAGES = {
     'staticfiles': {
         'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
     },
 }
 
-MEDIA_URL = f'/{ADMIN_URL}media/'
+MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# ── Authentication ───────────────────────────────────────────────────────
+# EmailOrUsernameModelBackend first (lets members log in with either);
+# ModelBackend stays as a fallback so anything relying on default
+# username-only behavior (e.g. Django Admin's own login form) is unaffected.
+AUTHENTICATION_BACKENDS = [
+    'accounts.backends.EmailOrUsernameModelBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
+LOGIN_URL = '/ingresar/'
+LOGIN_REDIRECT_URL = '/mi-cuenta/'
+LOGOUT_REDIRECT_URL = '/'
+
+# ── Email ────────────────────────────────────────────────────────────────
+# Console backend only — password reset emails are printed to the
+# recreo-django container logs (`docker logs recreo-django`), not actually
+# sent. This is intentional for this phase (no real transactional email is
+# configured yet). Production will need: EMAIL_BACKEND switched to SMTP,
+# EMAIL_HOST/PORT/HOST_USER/HOST_PASSWORD/USE_TLS, and DEFAULT_FROM_EMAIL —
+# most likely via SES given the AWS-hosted stack, added as env vars the
+# same way DB_* are handled, never hardcoded here.
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+DEFAULT_FROM_EMAIL = 'Recreo Bienestar <no-reply@recreobienestar.com>'
 
 # ── REST API ─────────────────────────────────────────────────────────────
 # Read-only, public, same-origin (served under /api/ on the same domain as
 # the static site — no separate frontend origin exists yet, so no CORS
 # package is installed; adding one later should default to an explicit
-# allow-list, never a wildcard). AllowAny is safe here specifically because
-# every queryset in catalog/memberships already filters to
-# active/published rows before a serializer ever sees them — there is no
-# gated content this API can accidentally leak.
+# allow-list, never a wildcard).
+#
+# AllowAny is still correct: nothing under /api/ requires being logged in
+# to use. But — unlike when this comment first said "there is no gated
+# content this API can accidentally leak" (true in Phase 2, before
+# per-video membership access levels existed as a public concept) —
+# catalog.views.VideoViewSet now DOES check can_access_video() per request,
+# which needs to know the real caller, not always AnonymousUser. Session
+# authentication (safe for GET; DRF only enforces its CSRF check on unsafe
+# methods, and there are none here) is what lets that resolve correctly
+# for a logged-in same-origin browser session.
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
     'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.AllowAny'],
-    'DEFAULT_AUTHENTICATION_CLASSES': [],
+    'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.SessionAuthentication'],
     'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],
 }
 if DEBUG:
@@ -150,7 +190,14 @@ SECURE_SSL_REDIRECT = env('DJANGO_SECURE_SSL_REDIRECT') and not DEBUG
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 SESSION_COOKIE_HTTPONLY = True
-CSRF_COOKIE_HTTPONLY = False  # Django needs to read this one client-side for AJAX forms.
+# True: nothing in this app reads the CSRF cookie via JS — every form
+# (login, register, profile, password reset, logout) submits the token
+# through the standard hidden {% csrf_token %} input, not an AJAX header.
+# If a future feature needs the token in JS (e.g. a fetch() call), prefer
+# reading it from a {% csrf_token %} rendered into a <meta> tag over
+# flipping this back — keeps the cookie itself inaccessible to any script,
+# including an XSS payload, either way.
+CSRF_COOKIE_HTTPONLY = True
 
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'

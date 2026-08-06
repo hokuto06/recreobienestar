@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Mi perfil | Recreo Bienestar{% endblock %}
+{% block content %}
+<section class="container member-hero">
+  <span class="eyebrow">Mi cuenta</span>
+  <h1>Editar mi perfil</h1>
+</section>
+
+<section class="container section--tight" style="max-width:520px">
+  <div class="card">
+    <form method="post" enctype="multipart/form-data" novalidate>
+      {% csrf_token %}
+      {% for field in form %}
+        {% include "partials/_form_field.html" %}
+      {% endfor %}
+      <button class="btn btn-primary" type="submit">Guardar cambios</button>
+      <a class="btn btn-ghost" href="{% url 'accounts:dashboard' %}">Cancelar</a>
+    </form>
+  </div>
+</section>
+{% endblock %}

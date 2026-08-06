@@ -1,0 +1,35 @@
+{% comment %}
+Expects: video, unlocked (bool). Never decides access itself — that
+decision is made once, server-side, by the view via
+memberships.services.can_access_video; this partial only renders whatever
+the view already decided. Locked cards link to the same detail URL as
+unlocked ones — the detail view is what actually enforces access and
+shows the locked page instead of the embed.
+
+Locked cards deliberately do NOT set a background-image from
+thumbnail_display_url: that property falls back to a
+img.youtube.com/vi/<id>/... URL derived from the video's own ID when no
+thumbnail_url is set, which would hand out the ID through a card's inline
+style just as surely as embedding the player would. Same rule as
+video_locked.html, applied here too.
+{% endcomment %}
+<article class="video-card {% if not unlocked %}video-locked{% endif %}">
+  <a href="{% url 'catalog:video_detail' video.slug %}" class="video-frame" aria-label="{{ video.title }}"
+     {% if unlocked %}style="display:block;position:relative;background-image:url('{{ video.thumbnail_display_url }}');background-size:cover;background-position:center"
+     {% else %}style="display:flex;align-items:center;justify-content:center;background:var(--color-bg-alt)"{% endif %}>
+    <span class="lock-chip">
+      {% if unlocked %}
+        <svg width="13" height="13"><use href="#icon-play"></use></svg> Disponible
+      {% else %}
+        <svg width="13" height="13"><use href="#icon-lock"></use></svg> {{ video.get_access_level_display }}
+      {% endif %}
+    </span>
+    <span class="play-btn" aria-hidden="true">
+      <svg width="22" height="22"><use href="#icon-{% if unlocked %}play{% else %}lock{% endif %}"></use></svg>
+    </span>
+  </a>
+  <div class="video-meta">
+    <h3><a href="{% url 'catalog:video_detail' video.slug %}">{{ video.title }}</a></h3>
+    <p>{{ video.category.name }}{% if video.program %} · {{ video.program.name }}{% endif %}{% if video.duration_label %} · {{ video.duration_label }}{% endif %}</p>
+  </div>
+</article>

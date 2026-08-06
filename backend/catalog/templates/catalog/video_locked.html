@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Contenido bloqueado | Recreo Bienestar{% endblock %}
+{% block content %}
+{% comment %}
+Deliberately does not receive/render youtube_video_id, youtube_url, or any
+thumbnail derived from them (the thumbnail fallback IS the video ID
+embedded in a URL) — nothing here can leak which video this is beyond its
+title/description, which are not secret.
+{% endcomment %}
+<section class="container video-locked-page">
+  <div class="icon-tile" style="background:var(--color-gold-light);color:var(--color-gold);display:inline-flex;width:56px;height:56px;border-radius:50%;align-items:center;justify-content:center;margin-bottom:var(--space-4)">
+    <svg width="24" height="24"><use href="#icon-lock"></use></svg>
+  </div>
+  <span class="eyebrow">{{ video.category.name }}{% if video.program %} · {{ video.program.name }}{% endif %}</span>
+  <h1>{{ video.title }}</h1>
+  {% if video.short_description %}<p class="lede" style="margin-top:var(--space-3)">{{ video.short_description }}</p>{% endif %}
+
+  <p style="margin-top:var(--space-4);color:var(--color-text-muted)">
+    {% if not video.is_published %}
+      Este contenido todavía no está publicado.
+    {% else %}
+      Este video forma parte de {{ video.get_access_level_display|lower }}.
+      {% if not user.is_authenticated %}Ingresá a tu cuenta o {% endif %}
+      Sumate a una membresía para verlo.
+    {% endif %}
+  </p>
+
+  <div style="margin-top:var(--space-5);display:flex;gap:var(--space-3);justify-content:center;flex-wrap:wrap">
+    {% if not user.is_authenticated %}
+      <a class="btn btn-ghost" href="{% url 'accounts:login' %}">Ingresar</a>
+    {% endif %}
+    <a class="btn btn-primary" href="/#membresias">Ver planes de membresía</a>
+  </div>
+
+  <p style="margin-top:var(--space-5)"><a href="{% url 'catalog:video_library' %}">← Volver a la videoteca</a></p>
+</section>
+{% endblock %}

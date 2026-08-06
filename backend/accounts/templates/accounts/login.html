@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Ingresar | Recreo Bienestar{% endblock %}
+{% block content %}
+<div class="login-wrap">
+  <div class="container" style="display:flex;justify-content:center">
+    <div class="login-card">
+      <a href="/" class="logo">
+        <span class="logo-mark" aria-hidden="true">R</span>
+        Recreo Bienestar
+      </a>
+      <h1>Bienvenida de nuevo</h1>
+
+      <form class="login-form" method="post" novalidate>
+        {% csrf_token %}
+        {% for field in form %}
+          {% include "partials/_form_field.html" %}
+        {% endfor %}
+        {% if form.non_field_errors %}<div class="errorlist">{{ form.non_field_errors }}</div>{% endif %}
+        <input type="hidden" name="next" value="{{ next }}">
+        <button class="btn btn-primary btn-block" type="submit">
+          Ingresar <svg width="16" height="16"><use href="#icon-arrow-right"></use></svg>
+        </button>
+      </form>
+
+      <p class="form-note" style="margin-top:1rem">
+        <a href="{% url 'accounts:password_reset' %}">¿Olvidaste tu contraseña?</a>
+      </p>
+
+      <div class="login-divider">o</div>
+      <a class="btn btn-ghost btn-block" href="{% url 'accounts:register' %}">Crear una cuenta nueva</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

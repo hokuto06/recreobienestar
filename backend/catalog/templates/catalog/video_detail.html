@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ video.title }} | Recreo Bienestar{% endblock %}
+{% block content %}
+<section class="container section--tight" style="max-width:900px;margin-inline:auto">
+  <p><a href="{% url 'catalog:video_library' %}">← Volver a la videoteca</a></p>
+
+  <div class="video-detail-frame">
+    <button type="button" class="video-facade" data-video-facade
+      data-video-id="{{ video.youtube_video_id }}"
+      data-video-title="{{ video.title }}"
+      style="background-image:url('{{ video.thumbnail_display_url }}')"
+      aria-label="Reproducir {{ video.title }}">
+      <span class="play-btn" aria-hidden="true"><svg width="22" height="22"><use href="#icon-play"></use></svg></span>
+    </button>
+  </div>
+
+  <div style="margin-top:var(--space-5)">
+    <span class="eyebrow">{{ video.category.name }}{% if video.program %} · {{ video.program.name }}{% endif %}</span>
+    <h1>{{ video.title }}</h1>
+    {% if video.duration_label %}<p style="color:var(--color-text-muted)">{{ video.duration_label }}</p>{% endif %}
+    {% if video.full_description %}
+      <p class="lede" style="margin-top:var(--space-3)">{{ video.full_description|linebreaksbr }}</p>
+    {% elif video.short_description %}
+      <p class="lede" style="margin-top:var(--space-3)">{{ video.short_description }}</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

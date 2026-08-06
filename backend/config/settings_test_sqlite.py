@@ -20,3 +20,15 @@ DATABASES = {
 # SECURE_SSL_REDIRECT would 301 every single test request. Real
 # production config (config.settings) is untouched.
 SECURE_SSL_REDIRECT = False
+
+# CompressedManifestStaticFilesStorage requires collectstatic to have run
+# (entrypoint.sh does this before gunicorn starts, in production). Test
+# runs here bypass the entrypoint entirely, so there's no manifest —
+# fall back to plain StaticFilesStorage, which needs no manifest and is
+# all {% static %} tags need for tests to render.
+STORAGES = {
+    **STORAGES,  # noqa: F405
+    'staticfiles': {
+        'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
+    },
+}

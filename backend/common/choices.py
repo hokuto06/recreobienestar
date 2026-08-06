@@ -30,8 +30,19 @@ class SubscriptionStatus(models.TextChoices):
     EXPIRED = 'expired', 'Expirada'
 
 
-# Statuses that represent "currently paying / entitled" states before the
-# expiry check is applied. past_due is intentionally excluded: a lapsed
-# payment does not grant access, matching "an expired membership loses
-# access immediately".
-ENTITLED_STATUSES = (SubscriptionStatus.TRIAL, SubscriptionStatus.ACTIVE)
+# Statuses that represent "currently entitled" states BEFORE the expiry
+# check (Subscription.is_expired) is applied on top.
+#
+# CANCELLED is included deliberately: cancelling ends future renewal, but
+# a member who already paid for the current period keeps access until
+# ends_at passes — access is governed by ends_at, not by the act of
+# cancelling itself. (Phase 2 requirement: "cancelled memberships retain
+# or lose access according to ends_at".)
+#
+# PAST_DUE is intentionally excluded: a lapsed payment does not grant
+# access, matching "an expired membership loses access immediately".
+ENTITLED_STATUSES = (
+    SubscriptionStatus.TRIAL,
+    SubscriptionStatus.ACTIVE,
+    SubscriptionStatus.CANCELLED,
+)

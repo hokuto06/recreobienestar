@@ -108,6 +108,10 @@ class Video(TimeStampedModel):
         ordering = ['display_order', '-publication_date', 'id']
         verbose_name = 'Video'
         verbose_name_plural = 'Videos'
+        # is_published is in the WHERE clause of nearly every query in the
+        # app (library, dashboard, API, detail access check) — worth an
+        # explicit index even though today's catalog is small.
+        indexes = [models.Index(fields=['is_published'])]
 
     def __str__(self):
         return self.title
@@ -121,3 +125,13 @@ class Video(TimeStampedModel):
     @property
     def is_free(self):
         return self.access_level == VideoAccessLevel.FREE
+
+    @property
+    def thumbnail_display_url(self):
+        """Shared by templates and the API serializer (catalog/serializers.py)
+        so this fallback rule lives in exactly one place."""
+        if self.thumbnail_url:
+            return self.thumbnail_url
+        if self.youtube_video_id:
+            return f'https://img.youtube.com/vi/{self.youtube_video_id}/hqdefault.jpg'
+        return ''

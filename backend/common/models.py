@@ -22,3 +22,4 @@ class OrderedActiveModel(models.Model):
     class Meta:
         abstract = True
         ordering = ['display_order', 'id']
+        indexes = [models.Index(fields=['is_active'])]

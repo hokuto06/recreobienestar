@@ -1,30 +1,32 @@
 # Recreo Bienestar — Backend Architecture
 
-Status snapshot as of Phase 2. Companion docs: `deploy/PHASE1_DELIVERABLES.md`,
-`deploy/PHASE2_DELIVERABLES.md`. This file is the living reference; the
+Status snapshot as of Phase 2b (public auth, member dashboard, real
+membership access control, plus a production-readiness audit). Companion
+docs: `deploy/PHASE1_DELIVERABLES.md`, `deploy/PHASE2_DELIVERABLES.md`,
+`deploy/PHASE2B_DELIVERABLES.md`. This file is the living reference; the
 phase docs are point-in-time delivery records.
 
 ## 1. System overview
 
-Recreo Bienestar is a Django backend/admin plus a read-only API, sitting
-behind the same nginx reverse proxy that already serves the static
-marketing site and several unrelated client sites on one shared EC2 host.
-No public authentication, member dashboard, or payments exist yet — this
-phase is content management (Carla, via Django Admin) and read-only public
-data (via the API), full stop.
+Recreo Bienestar is a Django backend serving three things behind the same
+nginx reverse proxy that already serves the static marketing site and
+several unrelated client sites on one shared EC2 host: Django Admin
+(Carla's content management), a read-only public API, and now a full
+public member experience (registration, login, dashboard, video
+library/detail with real membership-gated access). Payments are still
+explicitly out of scope.
 
 ```mermaid
 flowchart LR
-    User[Visitor browser] -->|HTTPS| NGINX[nginx-proxy\nexisting, shared]
+    Visitor[Visitor browser] -->|HTTPS| NGINX[nginx-proxy\nexisting, shared]
     Carla[Carla] -->|HTTPS /gestion/ - pending| NGINX
     NGINX -->|"/ (static files)"| Static[recreobienestar static site\nunchanged]
-    NGINX -.->|"/gestion/ - not yet routed"| Django[recreo-django]
-    NGINX -.->|"/api/ - not yet routed"| Django
+    NGINX -.->|"/gestion/ /api/ /registro/ /ingresar/\n/mi-cuenta/ /videoteca/ /videos/... - pending"| Django[recreo-django]
     Django --> DB[(recreo-db\nPostgreSQL 16)]
 ```
 
-Dotted lines mark routes that are built and tested but **not yet reachable
-publicly** — see §12.
+Dotted lines mark routes that are built, tested, and verified against the
+live container but **not yet reachable publicly** — see §12.
 
 ## 2. Docker architecture
 
@@ -96,20 +98,30 @@ flowchart LR
 backend/
 ├── config/            settings, URL root, WSGI/ASGI, api_urls.py
 ├── common/             choices.py, text.py (slug + YouTube parsing),
-│                        validators.py, models.py (shared abstract bases)
+│                        validators.py, models.py (shared abstract bases),
+│                        forms.py (AccessibleFormMixin)
+├── accounts/            Profile + auth backend/forms/views (register,
+│                        login, logout, password reset, dashboard,
+│                        profile edit) + templates + tests
 ├── catalog/            Category, Program, Video + admin + serializers +
-│                        views + filters + tests
+│                        API views (views.py) + public HTML views
+│                        (public_views.py) + filters + templates + tests +
+│                        management/commands/seed_demo_data.py
 ├── memberships/         MembershipPlan, Subscription + access-control
 │                        service + admin + serializers + views + tests
+├── templates/            base.html, 404.html, 500.html, shared partials
+├── static/site/          CSS/JS copied from the static site (unmodified)
+│                        + one additive stylesheet
 ├── deploy/              nginx configs (proposed/snippet), phase docs
 ├── Dockerfile, entrypoint.sh, docker-compose.yml, requirements.txt
 └── manage.py, .env.example
 ```
 
-`common` exists specifically so `catalog` and `memberships` never need to
-import each other's models to agree on what a "plan1/plan2/free/all_paid"
-access level means — both read the same `VideoAccessLevel`/`PlanTier`
-enums.
+`common` exists specifically so `accounts`, `catalog`, and `memberships`
+never need to import each other's models to agree on what a
+"plan1/plan2/free/all_paid" access level means — all three read the same
+`VideoAccessLevel`/`PlanTier` enums, and all three's forms share one
+accessibility mixin.
 
 ## 6. Domain models
 
@@ -167,37 +179,71 @@ erDiagram
         datetime ends_at
         datetime cancelled_at
     }
+    User ||--o| Profile : ""
+    Profile {
+        string display_name
+        string avatar_url
+        image avatar
+    }
 ```
 
-All five models plus `MembershipPlan`/`Category`/`Program` inherit
+All models plus `MembershipPlan`/`Category`/`Program` inherit
 `created_at`/`updated_at` from a shared `TimeStampedModel` mixin; the three
 catalog-ish ones also share `is_active`/`display_order` via
-`OrderedActiveModel`.
+`OrderedActiveModel` (now indexed — see §17). `Profile.email` is a
+*property* reading `user.email`, not a stored column, so the two can never
+drift apart; it's auto-created via a `post_save` signal on `User`.
 
 ## 7. Access-control logic
 
-Implemented, unit-tested, **not wired to any view yet** — no public
-endpoint currently checks it, since there's no public auth to check it
-against. Lives in `memberships/services.py`:
+**Now wired into every place that shows video content** — Django Admin
+(implicitly, staff bypass), the public video library/detail pages, the
+member dashboard, and the read-only API. `memberships/services.py`
+remains the single decision point; nothing else re-derives these rules:
 
 ```mermaid
 flowchart TD
-    Start["can_access_video(user, video)"] --> Pub{video.is_published?}
+    Start["can_access_video(user, video)"] --> Staff{staff or superuser?}
+    Staff -->|Yes| Allow[Allow — even unpublished,\nso Carla can preview drafts]
+    Staff -->|No| Pub{video.is_published?}
     Pub -->|No| Deny[Deny]
     Pub -->|Yes| Level{access_level?}
-    Level -->|free| Allow[Allow — anyone, incl. anonymous]
-    Level -->|all_paid| AnyPlan{user has ANY\nactive subscription?}
-    Level -->|plan1 / plan2| ThatPlan{user has active\nsubscription to THAT tier?}
-    AnyPlan -->|Yes| Allow
+    Level -->|free| Allow2[Allow — anyone, incl. anonymous]
+    Level -->|all_paid| AnyPlan{ANY subscription active\nAND its plan is_active?}
+    Level -->|plan1 / plan2| ThatPlan{subscription to THAT tier\nactive AND plan is_active?}
+    AnyPlan -->|Yes| Allow2
     AnyPlan -->|No| Deny
-    ThatPlan -->|Yes| Allow
+    ThatPlan -->|Yes| Allow2
     ThatPlan -->|No| Deny
 ```
 
-`Subscription.is_active()` checks both `status in {trial, active}` **and**
-`not is_expired()` — a stale `active` status never overrides a passed
-`ends_at`. This is why "expired membership loses access immediately" holds
-even if a status-sync job hasn't run yet.
+`Subscription.is_active()` checks `status in {trial, active, cancelled}`
+**and** `not is_expired()` — a stale `active` status never overrides a
+passed `ends_at`, and a *cancelled* subscription keeps access until
+`ends_at` (cancelling stops renewal, not the period already paid for).
+`plan.is_active` is checked separately: a deactivated plan grants no
+access even to an otherwise-valid subscription.
+
+**Performance**: every function in this module accepts an optional
+`subscriptions` list — pass a pre-fetched
+`list(user.subscriptions.select_related('plan'))` when checking many
+videos in one request (dashboard, library, API list) or each video would
+re-query the user's subscriptions individually (see §17).
+
+**Where each surface enforces it:**
+- `catalog/public_views.py:video_detail` — checked before any
+  YouTube field enters the template context; locked → `video_locked.html`
+  (403), which receives no YouTube fields at all.
+- `catalog/views.py:VideoViewSet.retrieve` — same check, before the
+  serializer runs; locked → HTTP 403, no body fields.
+- `catalog/serializers.py:VideoListSerializer.get_thumbnail` — the
+  thumbnail is itself sensitive (it embeds the video ID when no explicit
+  `thumbnail_url` is set), so it's null for videos the caller can't
+  access, even in list views.
+- `catalog/templates/catalog/partials/_video_card.html` — locked cards
+  render a generic placeholder, never `thumbnail_display_url`.
+- `accounts/views.py:dashboard` — stamps `video.unlocked` on every video
+  once, server-side; templates read that, never re-derive it.
 
 ## 8. Django Admin responsibilities
 
@@ -215,6 +261,8 @@ publicly). Per model:
   count.
 - **Subscription**: status with a colored "current access" badge (computed
   from `is_active()`, not just the raw status field), bulk cancel.
+- **Profile**: read/search only from the admin (`has_add_permission` is
+  disabled — profiles are only ever created via the `post_save` signal).
 
 No public-facing admin functionality exists — everything here requires
 Django staff auth (see §10).
@@ -230,47 +278,56 @@ is no write path to secure because none was built.
 |---|---|---|
 | `GET /api/categories/` | active categories | — |
 | `GET /api/programs/` | active programs | — |
-| `GET /api/videos/` | published videos | `?category=<slug>` `?program=<slug>` `?access_level=<level>` |
-| `GET /api/videos/<slug>/` | one published video, 404 if unpublished/missing | — |
+| `GET /api/videos/` | published videos, per-viewer thumbnail (null if locked to them) | `?category=<slug>` `?program=<slug>` `?access_level=<level>` |
+| `GET /api/videos/<slug>/` | one video if accessible to the caller, **403 (not 404) if locked** | — |
 | `GET /api/plans/` | active plans | — |
 
 Paginated (`PageNumberPagination`, 20/page). Serializers hand-pick fields —
 `is_active`/`is_published`/timestamps/raw FK ids/raw `youtube_url` are
-never exposed. Same-origin only; no CORS package installed (nothing to
-configure yet — add an explicit allow-list, never a wildcard, if a
-separate frontend origin appears later).
+never exposed, and (since the Phase 2b audit — §17) neither is
+`youtube_video_id` or the derived thumbnail for a video the caller can't
+access, checked via the same `can_access_video` used everywhere else.
+Same-origin only; no CORS package installed (nothing to configure yet —
+add an explicit allow-list, never a wildcard, if a separate frontend
+origin appears later).
 
 ## 10. Current authentication status
 
 - **Django Admin**: standard Django session auth (`django.contrib.auth`),
-  staff/superuser only. No superuser exists yet — Carla's account is
-  prepared but not created (§18).
-- **REST API**: `AllowAny`, no authentication classes configured. Safe
-  today only because every queryset is pre-filtered to
-  active/published/public data before a serializer ever touches it — there
-  is no gated content this API can leak.
-- **Public registration/login**: does not exist. Planned for a future
-  phase (§16).
+  staff/superuser only, entirely separate flow from public member login.
+  Carla's superuser (`admincarla`) **exists**, created outside this
+  codebase as instructed (credentials never handled by Claude).
+- **Public members**: full registration/login/logout/password-reset flow
+  now exists (`accounts` app). Login accepts username OR email via a
+  custom `EmailOrUsernameModelBackend`. Sessions are the only mechanism —
+  no tokens, no social login. See §17 for the security properties audited.
+- **REST API**: `AllowAny` + `SessionAuthentication` (added in the Phase
+  2b audit — see §17 for why `AllowAny` alone was no longer sufficient
+  once the API needed to know *who* was asking).
 
 ## 11. Current production deployment status
 
 | Component | Status |
 |---|---|
-| `recreo-django` | running, healthy, DRF deployed |
-| `recreo-db` | running, healthy, migrations applied, never recreated during the API deploy |
+| `recreo-django` | running, healthy, all Phase 2b + audit fixes deployed |
+| `recreo-db` | running, healthy, all migrations applied, never recreated across any redeploy in this project's history |
 | Django Admin (`/gestion/`) | working — verified directly against the container; **not publicly routed** |
-| REST API (`/api/...`) | working — verified directly against the container; **not publicly routed** |
+| REST API (`/api/...`) | working, membership-gated — verified directly against the container; **not publicly routed** |
+| Public auth + dashboard + video library/detail | working — verified end-to-end directly against the container (register/login/dashboard/library/detail/logout); **not publicly routed** |
 | Static site (`/`) | untouched, verified live over HTTPS |
 | `django-api` / `blog-front` | intentionally stopped (memory headroom), untouched |
-| nginx routing for `/gestion/` and `/api/` | prepared, **not applied** (§12) |
-| Superuser | not created (§18) |
+| nginx routing | prepared for the full route set, **not applied** (§12) |
 
 ## 12. Nginx routing — still pending
 
-`backend/deploy/recreobienestar.conf.proposed` adds `/gestion/` and `/api/`
-`location` blocks to the existing `recreobienestar.com` server block,
-before its catch-all `location /`. It does not touch the static site's
-routing, `ssl_certificate` lines, or any other domain's config.
+`backend/deploy/recreobienestar.conf.proposed` adds `location` blocks for
+`/gestion/`, `/api/`, the public auth/dashboard/library paths (via one
+regex location), and `/static/`/`/media/` (with `^~` — needed so they
+aren't shadowed by the static site's own `\.(css|js|...)$` regex block,
+a real routing bug caught and fixed while drafting this) to the existing
+`recreobienestar.com` server block, before its catch-all `location /`. It
+does not touch the static site's routing, `ssl_certificate` lines, or any
+other domain's config.
 
 **Blocked by a pre-existing, unrelated issue**, not by this config:
 `nginx -t` fails on `nginx-flask-prod/nginx/conf.d/default.conf` (a
@@ -302,6 +359,13 @@ committed.
 | `ADMIN_URL` | mount point for Django Admin, default `gestion/` |
 | `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT` | Postgres connection |
 | `DJANGO_SECURE_SSL_REDIRECT` | `True` in production; nginx terminates TLS and forwards `X-Forwarded-Proto` |
+
+No new variables in Phase 2b. `STATIC_URL`/`MEDIA_URL` moved from
+`/gestion/static//media/` to top-level `/static/`/`/media/` (harmless —
+nginx was never reloaded with the old paths live). `EMAIL_BACKEND` is
+hardcoded to the console backend (not env-configurable) since real email
+is explicitly out of scope this phase — see
+`deploy/PHASE2B_DELIVERABLES.md` §12 for what production email will need.
 
 ## 14. Backup and restore flow
 
@@ -353,26 +417,72 @@ Both tested end-to-end during Phase 2 (dump created, contents listed via
 
 ## 16. Future phases (not started)
 
-- **Public authentication** — registration/login for real members, session
-  or token-based, wired to the existing (untested-in-production)
-  `can_access_video` logic.
-- **Member dashboard** — "my videos", "my membership status", using the
-  read-only API plus new authenticated endpoints.
-- **Memberships going live** — actually enforcing `access_level` on video
-  playback once auth exists; today `Subscription`/`MembershipPlan` are
-  fully modeled and tested but nothing public checks them.
+- **Memberships going fully live** — Phase 2b wired real access control
+  into every surface, but nothing yet lets a member *acquire* a paid
+  subscription — that's §"Payments" below. `Subscription`/`MembershipPlan`
+  are fully modeled, tested, and enforced; they just have no public
+  purchase path.
 - **Payments** — plan purchase/renewal, likely a provider webhook driving
-  `Subscription.status`/`ends_at`. Explicitly out of scope through Phase 2.
+  `Subscription.status`/`ends_at`. Explicitly out of scope through Phase 2b.
+  Mercado Pago named explicitly as still not implemented.
 - **Webhooks** — inbound (payment provider → subscription state) and
   possibly outbound (e.g. notifying on new video publish). Not designed
   yet.
+- **Production email** — see `deploy/PHASE2B_DELIVERABLES.md` §12 for the
+  SES/SMTP env vars this will need.
 
-## 17. Rollback procedures
+## 17. Security audit (Phase 2b)
+
+Performed before committing, per explicit request, covering security,
+membership rules, UX, database, performance, and accessibility. Found and
+fixed four real issues rather than confirming everything was already
+fine — full detail in `deploy/PHASE2B_DELIVERABLES.md` §"Audit findings";
+summarized here since they changed the architecture:
+
+1. **API authorization bypass** (most significant finding): the DRF API
+   was built in Phase 2, before per-video membership access control
+   existed as a public concept. `VideoDetailSerializer` exposed
+   `youtube_video_id` for *any* published video regardless of
+   `access_level`, and `VideoListSerializer`'s thumbnail did the same
+   implicitly (the thumbnail fallback derives a URL from the video ID).
+   `_video_card.html` had the identical bug for locked cards in the HTML
+   library/dashboard. Fixed by wiring `can_access_video` into the API
+   (`VideoViewSet.retrieve` returns 403 pre-serialization;
+   `SessionAuthentication` added so the API can tell who's actually
+   asking) and into the card partial. See §7 and §9.
+2. **`User.email` had no database-level unique constraint** — only an
+   application-level check, a real TOCTOU race. Fixed with a raw-SQL
+   migration adding a case-insensitive partial unique index directly on
+   `auth_user`, without swapping `AUTH_USER_MODEL`.
+3. **N+1 queries**: `can_access_video` re-queried the user's subscriptions
+   on every call; checking N videos (dashboard, library, API list) meant
+   N extra queries. Fixed by threading an optional pre-fetched
+   `subscriptions` list through the service layer — same function, same
+   rules, batched. Verified with query-count regression tests (not just
+   asserted) on all three surfaces.
+4. **Login dropped `?next=`**: an overridden `get_success_url()` always
+   redirected to the dashboard, silently breaking "take me back to what I
+   was doing" after being bounced to login from a protected page. Removed
+   the override — Django's own default already does this correctly.
+
+Also added: missing indexes on `is_active`/`is_published` (the columns
+nearly every query filters on), branded `404.html`/`500.html` (Django's
+bare-bones English defaults were live in production under `DEBUG=False`),
+and `aria-describedby`/`aria-invalid` wiring on this app's own forms via a
+shared `AccessibleFormMixin` + `_form_field.html` partial (a mismatched-id
+bug in the first attempt was itself caught by the test written for it).
+
+## 18. Rollback procedures
 
 - **Server containers**: `cd /home/ubuntu/recreo-bienestar-backend &&
   docker compose down -v` — removes `recreo-django`, `recreo-db`, their
   networks and volumes (⚠️ `-v` deletes the database — take a backup first,
   §14). Does not touch `nginx-flask-prod` in any way.
+- **Migration rollback**: `docker exec recreo-django python manage.py
+  migrate accounts 0001` reverts the email unique index (and, further,
+  `migrate accounts zero` removes Profile entirely — no other app depends
+  on it). `migrate catalog 0001` / `migrate memberships 0001` drop the new
+  indexes only, no data loss either way.
 - **nginx**: nothing has been applied yet (§12), so there's nothing to roll
   back. If it's later applied and needs reverting: restore
   `nginx/conf.d/recreobienestar.conf` from `nginx-flask-prod` git history
@@ -384,7 +494,7 @@ Both tested end-to-end during Phase 2 (dump created, contents listed via
 - **Server source**: `rm -rf /home/ubuntu/recreo-bienestar-backend` removes
   the synced source, built image, and `.env` from the host entirely.
 
-## 18. Commands required to resume development
+## 19. Commands required to resume development
 
 ```bash
 # Sync latest backend/ to the server (from this repo, local machine)

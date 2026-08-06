@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Crear cuenta | Recreo Bienestar{% endblock %}
+{% block content %}
+<div class="login-wrap">
+  <div class="container" style="display:flex;justify-content:center">
+    <div class="login-card">
+      <a href="/" class="logo">
+        <span class="logo-mark" aria-hidden="true">R</span>
+        Recreo Bienestar
+      </a>
+      <h1>Creá tu cuenta</h1>
+      <p>Registrate para acceder a la videoteca y tu membresía.</p>
+
+      <form class="login-form" method="post" novalidate>
+        {% csrf_token %}
+        {% for field in form %}
+          {% include "partials/_form_field.html" %}
+        {% endfor %}
+        {% if form.non_field_errors %}<div class="errorlist">{{ form.non_field_errors }}</div>{% endif %}
+        <button class="btn btn-primary btn-block" type="submit">
+          Crear cuenta <svg width="16" height="16"><use href="#icon-arrow-right"></use></svg>
+        </button>
+      </form>
+
+      <div class="login-divider">o</div>
+      <a class="btn btn-ghost btn-block" href="{% url 'accounts:login' %}">Ya tengo cuenta — ingresar</a>
+
+      <p class="form-note" style="margin-top:1.5rem">
+        Al registrarte, algunos videos quedan disponibles de forma gratuita.
+        El acceso a contenido de planes pagos se habilita según tu membresía.
+      </p>
+    </div>
+  </div>
+</div>
+{% endblock %}
