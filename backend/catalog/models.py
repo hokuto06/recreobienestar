@@ -1,4 +1,6 @@
+from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 from common.choices import VideoAccessLevel
 from common.models import OrderedActiveModel, TimeStampedModel
@@ -135,3 +137,70 @@ class Video(TimeStampedModel):
         if self.youtube_video_id:
             return f'https://img.youtube.com/vi/{self.youtube_video_id}/hqdefault.jpg'
         return ''
+
+
+class VideoProgress(TimeStampedModel):
+    """One row per (user, video): a simple started/viewed/completed marker.
+
+    Phase 3 scope only — deliberately NOT trying to sync real YouTube
+    playback position/percent (no YouTube IFrame API wiring exists yet).
+    `progress_percent` is a coarse, self-reported-by-the-app value (0 until
+    completed, 100 once `completed` is set) rather than a real watch-time
+    fraction, kept mainly so templates/future work have a number to render
+    a progress bar from without a schema change later.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='video_progress',
+    )
+    video = models.ForeignKey(
+        Video, on_delete=models.CASCADE, related_name='progress_entries',
+    )
+
+    started_at = models.DateTimeField(default=timezone.now)
+    last_viewed_at = models.DateTimeField(default=timezone.now)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    completed = models.BooleanField(default=False)
+    progress_percent = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'video'], name='unique_progress_per_user_video'),
+        ]
+        ordering = ['-last_viewed_at']
+        verbose_name = 'Progreso de video'
+        verbose_name_plural = 'Progreso de videos'
+        indexes = [models.Index(fields=['user', 'completed'])]
+
+    def __str__(self):
+        state = 'completado' if self.completed else 'en progreso'
+        return f'{self.user} — {self.video} ({state})'
+
+    def mark_completed(self):
+        self.completed = True
+        self.completed_at = timezone.now()
+        self.progress_percent = 100
+        self.save(update_fields=['completed', 'completed_at', 'progress_percent', 'updated_at'])
+
+
+class Favorite(TimeStampedModel):
+    """A member bookmarking a video for later — independent of access level,
+    so a locked video can be saved as a reminder to watch it once the
+    member upgrades. Purely a bookmark: no access decision reads this
+    model, only memberships.services.can_access_video does."""
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='favorites',
+    )
+    video = models.ForeignKey(
+        Video, on_delete=models.CASCADE, related_name='favorited_by',
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'video'], name='unique_favorite_per_user_video'),
+        ]
+        ordering = ['-created_at']
+        verbose_name = 'Favorito'
+        verbose_name_plural = 'Favoritos'
+
+    def __str__(self):
+        return f'{self.user} ♥ {self.video}'

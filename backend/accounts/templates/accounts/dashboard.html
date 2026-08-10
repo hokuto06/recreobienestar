@@ -26,6 +26,19 @@
   <p class="lede" style="margin-top:0.5rem">Este es el resumen de tu cuenta y tu videoteca disponible.</p>
 </section>
 
+{% if continue_watching %}
+  <section class="container section--tight">
+    <div class="video-section-title">
+      <h2>Continuar viendo</h2>
+    </div>
+    <div class="continue-watching-row">
+      {% for progress in continue_watching %}
+        {% include "catalog/partials/_video_card.html" with video=progress.video unlocked=progress.video.unlocked %}
+      {% endfor %}
+    </div>
+  </section>
+{% endif %}
+
 <section class="container section--tight">
   <div class="dashboard-grid">
     <div>
@@ -88,6 +101,23 @@
           </a>
         {% endif %}
       </div>
+
+      <div class="card" style="margin-top:var(--space-4)">
+        <h3>Tu progreso</h3>
+        <p style="margin-top:0.5rem;color:var(--color-text-muted);font-size:0.9rem">
+          {{ completed_count }} video{{ completed_count|pluralize }} completado{{ completed_count|pluralize }}
+        </p>
+        <p style="margin-top:0.5rem"><a href="{% url 'accounts:favorites' %}">Ver mis favoritos →</a></p>
+      </div>
+
+      {% if favorite_videos %}
+        <div class="card" style="margin-top:var(--space-4)">
+          <h3>Tus favoritos</h3>
+          {% for video in favorite_videos %}
+            <p style="margin-top:0.5rem"><a href="{% url 'catalog:video_detail' video.slug %}">{{ video.title }}</a></p>
+          {% endfor %}
+        </div>
+      {% endif %}
 
       {% if featured_videos %}
         <div class="card" style="margin-top:var(--space-4)">

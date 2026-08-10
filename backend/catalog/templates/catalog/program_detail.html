@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}{{ program.name }} | Recreo Bienestar{% endblock %}
+{% block content %}
+<section class="container member-hero">
+  <p><a href="{% url 'catalog:video_library' %}">← Volver a la videoteca</a></p>
+  <span class="eyebrow">Programa</span>
+  <h1>{{ program.name }}</h1>
+  {% if program.description %}
+    <p class="lede" style="margin-top:0.5rem;max-width:60ch">{{ program.description|linebreaksbr }}</p>
+  {% endif %}
+  {% if progress_summary %}
+    <p style="margin-top:var(--space-3);color:var(--color-text-muted)">
+      {{ progress_summary.completed }} de {{ progress_summary.total }} videos completados
+    </p>
+  {% endif %}
+</section>
+
+<section class="container section--tight">
+  {% if videos %}
+    <div class="grid grid-3">
+      {% for video in videos %}
+        {% include "catalog/partials/_video_card.html" with video=video unlocked=video.unlocked %}
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <h3>Todavía no hay videos publicados en este programa</h3>
+      <p>Volvé pronto — Carla está preparando el contenido.</p>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

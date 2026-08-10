@@ -14,15 +14,68 @@
     </button>
   </div>
 
-  <div style="margin-top:var(--space-5)">
-    <span class="eyebrow">{{ video.category.name }}{% if video.program %} · {{ video.program.name }}{% endif %}</span>
-    <h1>{{ video.title }}</h1>
-    {% if video.duration_label %}<p style="color:var(--color-text-muted)">{{ video.duration_label }}</p>{% endif %}
-    {% if video.full_description %}
-      <p class="lede" style="margin-top:var(--space-3)">{{ video.full_description|linebreaksbr }}</p>
-    {% elif video.short_description %}
-      <p class="lede" style="margin-top:var(--space-3)">{{ video.short_description }}</p>
+  <div class="video-detail-header">
+    <div>
+      <span class="eyebrow">{{ video.category.name }}{% if video.program %} · <a href="{% url 'catalog:program_detail' video.program.slug %}">{{ video.program.name }}</a>{% endif %}</span>
+      <h1>{{ video.title }}</h1>
+      {% if video.duration_label %}<p style="color:var(--color-text-muted)">{{ video.duration_label }}</p>{% endif %}
+    </div>
+    {% if user.is_authenticated %}
+      <div class="video-detail-actions">
+        <form method="post" action="{% url 'catalog:toggle_favorite' video.slug %}" data-favorite-form>
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.path }}">
+          <button type="submit" class="btn-favorite {% if is_favorited %}is-active{% endif %}"
+            aria-pressed="{% if is_favorited %}true{% else %}false{% endif %}"
+            aria-label="{% if is_favorited %}Quitar de favoritos{% else %}Agregar a favoritos{% endif %}">
+            <svg width="18" height="18"><use href="#icon-heart"></use></svg>
+            <span data-favorite-label>{% if is_favorited %}En favoritos{% else %}Agregar a favoritos{% endif %}</span>
+          </button>
+        </form>
+        {% if progress.completed %}
+          <span class="status-pill is-active">
+            <svg width="13" height="13"><use href="#icon-check"></use></svg> Completado
+          </span>
+        {% else %}
+          <form action="{% url 'catalog:mark_video_completed' video.slug %}" method="post">
+            {% csrf_token %}
+            <button class="btn btn-ghost btn-sm" type="submit">Marcar como visto</button>
+          </form>
+        {% endif %}
+      </div>
     {% endif %}
   </div>
+
+  {% if video.full_description %}
+    <p class="lede" style="margin-top:var(--space-3)">{{ video.full_description|linebreaksbr }}</p>
+  {% elif video.short_description %}
+    <p class="lede" style="margin-top:var(--space-3)">{{ video.short_description }}</p>
+  {% endif %}
+
+  {% if previous_video or next_video %}
+    <nav class="video-neighbors" aria-label="Navegación dentro del programa">
+      {% if previous_video %}
+        <a href="{% url 'catalog:video_detail' previous_video.1 %}">← {{ previous_video.2 }}</a>
+      {% else %}
+        <span></span>
+      {% endif %}
+      {% if next_video %}
+        <a href="{% url 'catalog:video_detail' next_video.1 %}">{{ next_video.2 }} →</a>
+      {% endif %}
+    </nav>
+  {% endif %}
 </section>
+
+{% if related_videos %}
+  <section class="container section--tight">
+    <div class="video-section-title">
+      <h2>También te puede interesar</h2>
+    </div>
+    <div class="grid grid-4">
+      {% for related in related_videos %}
+        {% include "catalog/partials/_video_card.html" with video=related unlocked=related.unlocked %}
+      {% endfor %}
+    </div>
+  </section>
+{% endif %}
 {% endblock %}

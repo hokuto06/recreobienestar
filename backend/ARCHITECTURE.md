@@ -731,3 +731,88 @@ security_groups.tf`'s comments on `aws_security_group.prueba` and
 # origin.recreobienestar.com removed from the cert — not necessary; an
 # extra unused SAN is harmless.
 ```
+
+## 21. Phase 3 — Member experience and product UX (2026-08-10)
+
+Branch `feature/phase3-member-ux` (off `feature/django-backend`; not merged
+to `main`). Application/frontend/backend only — no Terraform, Route53,
+CloudFront, security group, or certificate changes; no payment
+integration. Goal was to make the existing member experience (dashboard,
+video library, video detail, profile) and the public home page feel like a
+finished product ahead of Phase 4 (payments).
+
+### New models
+
+- `catalog.VideoProgress` (user, video) unique — `started_at`,
+  `last_viewed_at`, `completed_at`, `completed`, `progress_percent`
+  (coarse: 0 or 100 in this phase, no real YouTube playback-time sync).
+  Powers "continue watching" and completed badges.
+- `catalog.Favorite` (user, video) unique — a bookmark independent of
+  access level (a locked video can be saved for later). Migration
+  `catalog/0003_favorite_videoprogress_and_more`, additive only, rollback
+  is `migrate catalog 0002`.
+
+### New routes
+
+`/programas/<slug>/` (program page), `/videos/<slug>/completado/` and
+`/videos/<slug>/favorito/` (POST-only engagement actions),
+`/mi-cuenta/favoritos/`, `/mi-cuenta/cambiar-clave/` + `/hecho/` (a real
+in-session password change was missing — the profile page previously had
+nowhere useful to send members who wanted to change their password
+without logging out).
+
+### Engagement logic
+
+New `catalog/services.py` (mirrors `memberships/services.py`'s pattern):
+`record_video_view`, `toggle_favorite`, `get_continue_watching`,
+`get_favorited_video_ids`, `get_progress_map` — all batch-fetch for a
+page's worth of videos in one query, never one query per video (same
+discipline as `can_access_video`'s `subscriptions` parameter). Access is
+re-checked live everywhere a video is displayed, including "continue
+watching" — a lapsed subscription re-locks a video's card (and hides its
+thumbnail) even if progress was recorded while the member still had
+access.
+
+### Public home page: now partially dynamic, client-side
+
+`index.html` (git-tracked at the repo root; `backend/nginx/static-root/`
+is a gitignored deploy-time copy of it — worth remembering, it's easy to
+edit the copy and lose the change) previously hardcoded fake programs,
+fake video cards with fake YouTube IDs, and "price TBD" plan cards, with
+several CTAs pointing at the old no-auth demo pages (`login.html`,
+`miembros.html`). These are now populated from the existing read-only API
+(`/api/programs/`, `/api/videos/`, `/api/plans/`) by a new vanilla-JS file
+(`js/home-dynamic.js`), and all CTAs point at the real `/ingresar/`,
+`/registro/`, `/videoteca/`.
+
+This is a client-side fetch, not server-side rendering, because `/` is
+served by nginx directly from a static file and was never routed to
+Django (see `catalog/urls.py`'s comment) — routing it to Django, or
+reconsidering CloudFront's cache behavior for `/`, would be an
+infrastructure change out of scope for this phase. Known cost: with
+JavaScript unavailable, the three dynamic sections show a permanent
+"Cargando…" instead of resolving (the rest of the site already requires
+JS to watch any video at all, so this extends an existing dependency
+rather than introducing a new one to a previously JS-free page); crawlers
+that don't execute JS won't see the real programs/videos/prices either,
+though modern Google/Bing do execute JS before indexing.
+
+### Everything else touched
+
+Dashboard: continue-watching row, favorites card, completed count.
+Video library: featured strip, newest/recommended sort links, favorite
+markers on cards. Video detail: related videos, previous/next within the
+same program, favorite toggle, mark-as-completed. Profile page: account
+summary (email, membership, join date) above the existing edit form.
+Navigation: added Programas/Membresías (anchor links into `/`) for
+anonymous visitors and Favoritos for members. Admin: registered the two
+new models, added featured/unfeatured video actions, made `price`
+inline-editable on the plan changelist.
+
+### Validation
+
+143 tests passing (105 pre-existing + 38 new), `manage.py check` clean,
+`makemigrations --check` reports nothing pending — all run locally via
+`config.settings_test_sqlite` per this project's own convention (§19).
+Live production validation (CloudFront, real login/admin/playback checks)
+happens as part of deploying this branch, not before.

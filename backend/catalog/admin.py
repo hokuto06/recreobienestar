@@ -1,7 +1,7 @@
 from django.contrib import admin, messages
 from django.utils.html import format_html
 
-from .models import Category, Program, Video
+from .models import Category, Favorite, Program, Video, VideoProgress
 
 
 @admin.register(Category)
@@ -107,7 +107,7 @@ class VideoAdmin(admin.ModelAdmin):
         ('Fechas', {'fields': ('created_at', 'updated_at'), 'classes': ('collapse',)}),
     )
 
-    actions = ['publish', 'unpublish', 'mark_free']
+    actions = ['publish', 'unpublish', 'mark_free', 'mark_featured', 'unmark_featured']
 
     @admin.display(description='Acceso')
     def access_level_badge(self, obj):
@@ -145,3 +145,34 @@ class VideoAdmin(admin.ModelAdmin):
     def mark_free(self, request, queryset):
         updated = queryset.update(access_level='free')
         self.message_user(request, f'{updated} video(s) marcado(s) como gratuitos.', messages.SUCCESS)
+
+    @admin.action(description='Marcar como destacados')
+    def mark_featured(self, request, queryset):
+        updated = queryset.update(is_featured=True)
+        self.message_user(request, f'{updated} video(s) marcado(s) como destacados.', messages.SUCCESS)
+
+    @admin.action(description='Quitar de destacados')
+    def unmark_featured(self, request, queryset):
+        updated = queryset.update(is_featured=False)
+        self.message_user(request, f'{updated} video(s) quitado(s) de destacados.', messages.SUCCESS)
+
+
+@admin.register(VideoProgress)
+class VideoProgressAdmin(admin.ModelAdmin):
+    """Read-mostly: progress rows are created/updated by member activity
+    (catalog/services.py), not authored by Carla — the admin view exists so
+    she can see engagement, not to hand-edit it."""
+    list_display = ('user', 'video', 'completed', 'started_at', 'last_viewed_at', 'completed_at')
+    list_filter = ('completed',)
+    search_fields = ('user__username', 'user__email', 'video__title')
+    autocomplete_fields = ('user', 'video')
+    readonly_fields = ('created_at', 'updated_at')
+    date_hierarchy = 'last_viewed_at'
+
+
+@admin.register(Favorite)
+class FavoriteAdmin(admin.ModelAdmin):
+    list_display = ('user', 'video', 'created_at')
+    search_fields = ('user__username', 'user__email', 'video__title')
+    autocomplete_fields = ('user', 'video')
+    readonly_fields = ('created_at', 'updated_at')

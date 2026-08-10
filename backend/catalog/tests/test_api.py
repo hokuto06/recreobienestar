@@ -104,6 +104,11 @@ class VideoApiTests(APITestCase):
         for field in ('is_published', 'created_at', 'updated_at', 'youtube_url'):
             self.assertNotIn(field, resp.data)
 
+    # ── access_level_display (Phase 3: home page dynamic content) ─────
+    def test_access_level_display_is_human_readable(self):
+        resp = self.client.get(reverse('video-detail', args=[self.published.slug]))
+        self.assertEqual(resp.data['access_level_display'], 'Gratuito')
+
     # ── filtering ────────────────────────────────────────────────────
     def test_filter_by_category(self):
         resp = self.client.get(reverse('video-list'), {'category': self.category.slug})
@@ -122,6 +127,14 @@ class VideoApiTests(APITestCase):
         slugs = [v['slug'] for v in resp.data['results']]
         self.assertIn(self.plan1_video.slug, slugs)
         self.assertNotIn(self.published.slug, slugs)
+
+    def test_filter_by_is_featured(self):
+        self.published.is_featured = True
+        self.published.save()
+        resp = self.client.get(reverse('video-list'), {'is_featured': 'true'})
+        slugs = [v['slug'] for v in resp.data['results']]
+        self.assertIn(self.published.slug, slugs)
+        self.assertNotIn(self.plan1_video.slug, slugs)
 
     # ── pagination ───────────────────────────────────────────────────
     def test_list_is_paginated(self):

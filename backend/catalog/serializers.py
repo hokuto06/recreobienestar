@@ -51,13 +51,18 @@ class VideoListSerializer(serializers.ModelSerializer):
     category = CategoryMiniSerializer(read_only=True)
     program = ProgramMiniSerializer(read_only=True)
     thumbnail = serializers.SerializerMethodField()
+    # Human-readable label ("Gratuito", "Plan de membresía 1", ...) for
+    # clients that just want to display it without duplicating
+    # common.choices.VideoAccessLevel's labels themselves (e.g. the public
+    # home page's vanilla-JS fetch — see nginx/static-root/js/home-dynamic.js).
+    access_level_display = serializers.CharField(source='get_access_level_display', read_only=True)
 
     class Meta:
         model = Video
         fields = [
             'id', 'title', 'slug', 'short_description', 'thumbnail',
-            'category', 'program', 'access_level', 'is_featured',
-            'display_order', 'duration_label', 'publication_date',
+            'category', 'program', 'access_level', 'access_level_display',
+            'is_featured', 'display_order', 'duration_label', 'publication_date',
         ]
 
     def get_thumbnail(self, obj):

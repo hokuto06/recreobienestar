@@ -60,4 +60,49 @@
     frame.innerHTML = '';
     frame.appendChild(iframe);
   }
+
+  /* ---------- Favoritos: agregar/quitar sin recargar la página ----------
+     Progressive enhancement real: el botón vive dentro de un <form
+     method="post"> normal (ver video_detail.html) — sin JS, el submit
+     hace un POST+redirect común y corriente. Con JS, interceptamos ese
+     mismo submit y usamos fetch() en su lugar, leyendo el token CSRF del
+     <meta> en base.html (nunca de la cookie — CSRF_COOKIE_HTTPONLY=True,
+     ver el comentario ahí) en vez del campo oculto del form. */
+  var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+  var csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
+
+  document.querySelectorAll('[data-favorite-form]').forEach(function (form) {
+    form.addEventListener('submit', function (evt) {
+      var button = form.querySelector('button[type="submit"]');
+      if (!csrfToken || !button || button.disabled) { return; } // sin token: dejar el submit normal
+      evt.preventDefault();
+      button.disabled = true;
+      fetch(form.action, {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': csrfToken,
+          'Accept': 'application/json',
+        },
+      })
+        .then(function (resp) {
+          if (!resp.ok) { throw new Error('request failed'); }
+          return resp.json();
+        })
+        .then(function (data) {
+          var label = button.querySelector('[data-favorite-label]');
+          button.classList.toggle('is-active', data.favorited);
+          button.setAttribute('aria-pressed', String(data.favorited));
+          if (label) {
+            label.textContent = data.favorited ? 'En favoritos' : 'Agregar a favoritos';
+          }
+          button.disabled = false;
+        })
+        .catch(function () {
+          // Network/server error: fall back to the real form submission
+          // (the one evt.preventDefault() just stopped) so the action
+          // still completes instead of silently doing nothing.
+          form.submit();
+        });
+    });
+  });
 })();

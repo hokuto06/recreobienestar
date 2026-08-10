@@ -5,6 +5,8 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import (
     LoginView,
     LogoutView,
+    PasswordChangeDoneView,
+    PasswordChangeView,
     PasswordResetCompleteView,
     PasswordResetConfirmView,
     PasswordResetDoneView,
@@ -12,12 +14,13 @@ from django.contrib.auth.views import (
 )
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
-from django.views.generic import CreateView, UpdateView
+from django.views.generic import CreateView, ListView, UpdateView
 
-from catalog.models import Video
+from catalog.models import Favorite, Video
+from catalog.services import get_continue_watching, get_favorited_video_ids, get_progress_map
 from common.choices import VideoAccessLevel
 from memberships.models import Subscription
-from memberships.services import can_access_video
+from memberships.services import can_access_video, get_current_subscription
 
 from .forms import EmailOrUsernameAuthenticationForm, ProfileForm, RegistrationForm
 from .models import Profile
@@ -92,8 +95,27 @@ class MemberPasswordResetCompleteView(PasswordResetCompleteView):
     template_name = 'accounts/password_reset_complete.html'
 
 
+class MemberPasswordChangeView(LoginRequiredMixin, PasswordChangeView):
+    """GET/POST /mi-cuenta/cambiar-clave/ — requires the current password
+    (unlike the anonymous /recuperar-clave/ flow, which is for members
+    who've lost access entirely). Keeps the member logged in afterward —
+    PasswordChangeView already updates the session auth hash so the
+    current session isn't invalidated by the password change."""
+    login_url = reverse_lazy('accounts:login')
+    template_name = 'accounts/password_change_form.html'
+    success_url = reverse_lazy('accounts:password_change_done')
+
+
+class MemberPasswordChangeDoneView(LoginRequiredMixin, PasswordChangeDoneView):
+    login_url = reverse_lazy('accounts:login')
+    template_name = 'accounts/password_change_done.html'
+
+
 class ProfileEditView(LoginRequiredMixin, UpdateView):
-    """GET/POST /mi-cuenta/perfil/"""
+    """GET/POST /mi-cuenta/perfil/ — the edit form, plus (added in Phase 3)
+    a read-only account summary above it: display name, email, membership
+    status, and account creation date. No new personal fields were added —
+    everything shown already existed on User/Profile/Subscription."""
     login_url = reverse_lazy('accounts:login')
     form_class = ProfileForm
     template_name = 'accounts/profile_edit.html'
@@ -103,9 +125,40 @@ class ProfileEditView(LoginRequiredMixin, UpdateView):
         profile, _ = Profile.objects.get_or_create(user=self.request.user)
         return profile
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['subscription'] = get_current_subscription(self.request.user)
+        return context
+
     def form_valid(self, form):
         messages.success(self.request, 'Tu perfil fue actualizado.')
         return super().form_valid(form)
+
+
+class FavoritesListView(LoginRequiredMixin, ListView):
+    """GET /mi-cuenta/favoritos/ — every video the member has favorited,
+    most recent first. Locked/unlocked is still computed per-video (a
+    favorited video's access can change over time, e.g. a membership
+    lapsed), never assumed from having favorited it."""
+    login_url = reverse_lazy('accounts:login')
+    template_name = 'accounts/favorites.html'
+    context_object_name = 'favorites'
+    paginate_by = 12
+
+    def get_queryset(self):
+        return (
+            Favorite.objects.filter(user=self.request.user)
+            .select_related('video', 'video__category', 'video__program')
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        videos = [f.video for f in context['favorites']]
+        subscriptions = list(self.request.user.subscriptions.select_related('plan'))
+        for video in videos:
+            video.unlocked = can_access_video(self.request.user, video, subscriptions=subscriptions)
+            video.is_favorited = True
+        return context
 
 
 @login_required(login_url=reverse_lazy('accounts:login'))
@@ -121,20 +174,38 @@ def dashboard(request):
     # each video would re-query the user's subscriptions from scratch
     # (an N+1: one query per video instead of this single one).
     all_subscriptions = list(Subscription.objects.filter(user=user).select_related('plan'))
-    current_subscription = max(all_subscriptions, key=lambda s: s.created_at, default=None)
+    current_subscription = get_current_subscription(user, subscriptions=all_subscriptions)
     membership_is_active = current_subscription.is_active() if current_subscription else False
 
     published_videos = list(
         Video.objects.filter(is_published=True).select_related('category', 'program')
     )
+    # Same batching discipline for favorites/progress as for access — one
+    # query each for the whole dashboard, not one per video (see
+    # catalog/services.py).
+    favorited_ids = get_favorited_video_ids(user, videos=published_videos)
+    progress_map = get_progress_map(user, videos=published_videos)
     # Computed once, here, and stamped onto each instance — templates read
     # video.unlocked rather than re-deriving access (Django's template
     # language can't express `video in available_videos` in a {% with %},
     # and re-checking per-template would risk drifting from this decision).
     for video in published_videos:
         video.unlocked = can_access_video(user, video, subscriptions=all_subscriptions)
+        video.is_favorited = video.id in favorited_ids
+        video.progress = progress_map.get(video.id)
     available_videos = [v for v in published_videos if v.unlocked]
     locked_videos = [v for v in published_videos if not v.unlocked]
+    completed_count = sum(1 for p in progress_map.values() if p.completed)
+
+    # "Continue watching" videos were accessible when the member started
+    # them, but access is re-checked here rather than assumed — a lapsed
+    # subscription must re-lock the card (and its thumbnail) exactly like
+    # everywhere else, not just skip straight to "still available".
+    continue_watching = get_continue_watching(user, limit=6)
+    for progress in continue_watching:
+        progress.video.unlocked = can_access_video(user, progress.video, subscriptions=all_subscriptions)
+        progress.video.is_favorited = progress.video.id in favorited_ids
+        progress.video.progress = progress
 
     context = {
         'profile': profile,
@@ -148,5 +219,8 @@ def dashboard(request):
         )[:4],
         'featured_videos': [v for v in published_videos if v.is_featured][:4],
         'free_videos': [v for v in published_videos if v.access_level == VideoAccessLevel.FREE][:4],
+        'continue_watching': continue_watching,
+        'favorite_videos': [v for v in published_videos if v.is_favorited][:6],
+        'completed_count': completed_count,
     }
     return render(request, 'accounts/dashboard.html', context)

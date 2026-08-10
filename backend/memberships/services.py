@@ -54,6 +54,24 @@ def user_has_any_active_paid_plan(user, at=None, subscriptions=None):
     )
 
 
+def get_current_subscription(user, subscriptions=None):
+    """The subscription to treat as "your membership" for display purposes
+    (dashboard, profile) — the most recently created one, active or not, so
+    an expired/cancelled plan still shows as "your plan, expired" rather
+    than silently falling back to "no plan". Not an access decision (see
+    can_access_video for that) — purely what to show in the UI.
+
+    Pass a pre-fetched `subscriptions` list to avoid a second query when the
+    caller already fetched them (e.g. for can_access_video batching)."""
+    candidates = (
+        subscriptions if subscriptions is not None
+        else list(user.subscriptions.select_related('plan').all())
+        if user is not None and getattr(user, 'is_authenticated', False)
+        else []
+    )
+    return max(candidates, key=lambda s: s.created_at, default=None)
+
+
 def can_access_video(user, video, at=None, subscriptions=None):
     """The single source of truth for "can this user watch this video right
     now". Mirrors the rules:

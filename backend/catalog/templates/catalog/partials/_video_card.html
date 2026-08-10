@@ -6,6 +6,11 @@ the view already decided. Locked cards link to the same detail URL as
 unlocked ones — the detail view is what actually enforces access and
 shows the locked page instead of the embed.
 
+video.is_favorited / video.progress are optional (stamped by
+catalog.public_views._stamp_engagement or accounts.views.dashboard) — the
+{% if %} guards below make the card safe to reuse in a context that hasn't
+stamped them (they'll just not show).
+
 Locked cards deliberately do NOT set a background-image from
 thumbnail_display_url: that property falls back to a
 img.youtube.com/vi/<id>/... URL derived from the video's own ID when no
@@ -24,12 +29,22 @@ video_locked.html, applied here too.
         <svg width="13" height="13"><use href="#icon-lock"></use></svg> {{ video.get_access_level_display }}
       {% endif %}
     </span>
+    {% if video.progress.completed %}
+      <span class="lock-chip completed-chip">
+        <svg width="13" height="13"><use href="#icon-check"></use></svg> Visto
+      </span>
+    {% endif %}
     <span class="play-btn" aria-hidden="true">
       <svg width="22" height="22"><use href="#icon-{% if unlocked %}play{% else %}lock{% endif %}"></use></svg>
     </span>
   </a>
   <div class="video-meta">
-    <h3><a href="{% url 'catalog:video_detail' video.slug %}">{{ video.title }}</a></h3>
+    <h3>
+      <a href="{% url 'catalog:video_detail' video.slug %}">{{ video.title }}</a>
+      {% if video.is_favorited %}
+        <svg width="14" height="14" class="favorite-mark" aria-label="En tus favoritos"><use href="#icon-heart"></use></svg>
+      {% endif %}
+    </h3>
     <p>{{ video.category.name }}{% if video.program %} · {{ video.program.name }}{% endif %}{% if video.duration_label %} · {{ video.duration_label }}{% endif %}</p>
   </div>
 </article>

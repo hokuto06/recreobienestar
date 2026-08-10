@@ -3,11 +3,29 @@
 {% block content %}
 <section class="container member-hero">
   <span class="eyebrow">Mi cuenta</span>
-  <h1>Editar mi perfil</h1>
+  <h1>Mi perfil</h1>
 </section>
 
 <section class="container section--tight" style="max-width:520px">
-  <div class="card">
+  <div class="card profile-summary">
+    <h3>Resumen de tu cuenta</h3>
+    <dl>
+      <dt>Nombre para mostrar</dt>
+      <dd>{{ user.profile.name_for_display }}</dd>
+      <dt>Correo electrónico</dt>
+      <dd>{{ user.email }}</dd>
+      <dt>Membresía</dt>
+      <dd>{% if subscription %}{{ subscription.plan.name }} — {{ subscription.get_status_display }}{% else %}Plan gratuito{% endif %}</dd>
+      <dt>Miembro desde</dt>
+      <dd>{{ user.date_joined|date:"d/m/Y" }}</dd>
+    </dl>
+    <p style="margin-top:var(--space-4)">
+      <a href="{% url 'accounts:password_change' %}">Cambiar mi contraseña →</a>
+    </p>
+  </div>
+
+  <div class="card" style="margin-top:var(--space-4)">
+    <h3 style="margin-bottom:var(--space-3)">Editar datos</h3>
     <form method="post" enctype="multipart/form-data" novalidate>
       {% csrf_token %}
       {% for field in form %}

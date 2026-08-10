@@ -20,4 +20,7 @@ urlpatterns = [
 
     path('mi-cuenta/', views.dashboard, name='dashboard'),
     path('mi-cuenta/perfil/', views.ProfileEditView.as_view(), name='profile_edit'),
+    path('mi-cuenta/favoritos/', views.FavoritesListView.as_view(), name='favorites'),
+    path('mi-cuenta/cambiar-clave/', views.MemberPasswordChangeView.as_view(), name='password_change'),
+    path('mi-cuenta/cambiar-clave/hecho/', views.MemberPasswordChangeDoneView.as_view(), name='password_change_done'),
 ]

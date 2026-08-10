@@ -11,7 +11,9 @@ class MembershipPlanAdmin(admin.ModelAdmin):
         'name', 'tier', 'price', 'currency', 'duration_days',
         'is_active', 'display_order', 'subscriber_count',
     )
-    list_editable = ('display_order',)
+    # `price` editable straight from the changelist — Carla's most common
+    # edit — still goes through the model's MinValueValidator on save.
+    list_editable = ('display_order', 'price')
     list_filter = ('is_active', 'tier', 'currency')
     search_fields = ('name', 'description')
     prepopulated_fields = {'slug': ('name',)}
