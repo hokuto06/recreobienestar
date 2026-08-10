@@ -124,7 +124,22 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'static']
+# Bug fix (2026-08-10): this dict previously had only 'staticfiles'.
+# Django's STORAGES setting is NOT merged with its own built-in default —
+# declaring it at all replaces the whole thing, so omitting 'default' left
+# nothing registered under that alias. Any ImageField/FileField save
+# (Profile.avatar was the first ever exercised in production) lazily
+# resolves the default backend via storages['default'] and raised
+# InvalidStorageError: Could not find config for 'default' in
+# settings.STORAGES — a real production 500 on every profile photo
+# upload, not caught by the test suite because no test ever POSTed an
+# actual file to ProfileForm. 'default' explicitly set to Django's own
+# ordinary FileSystemStorage default (this project has no S3/CDN for
+# media yet) fixes it without masking anything.
 STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
     'staticfiles': {
         'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
     },
