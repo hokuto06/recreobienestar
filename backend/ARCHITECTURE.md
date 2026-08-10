@@ -621,3 +621,113 @@ sudo certbot renew --config-dir /home/ubuntu/nginx-flask-prod/letsencrypt \
   --no-random-sleep-on-renew \
   --deploy-hook "docker exec recreo-nginx nginx -s reload"
 ```
+
+## 20. Stage B — CloudFront migration (2026-08-10)
+
+Terraform (separate repo, `terraform-prod`) put `recreobienestar.com` and
+`www.recreobienestar.com` behind CloudFront and restricted the EC2 origin's
+inbound HTTPS to CloudFront only. `recreobienestar.com` is now served as:
+
+```mermaid
+flowchart LR
+    Visitor -->|HTTPS, viewer cert| CF[CloudFront\nE2QWAHOGFOOY6H]
+    CF -->|HTTPS only, real Host forwarded| RN[recreo-nginx\norigin.recreobienestar.com]
+    RN --> Django[recreo-django]
+```
+
+### What changed here (app repo)
+
+- `nginx/conf.d/recreobienestar.conf`: added `origin.recreobienestar.com`
+  to the port-80 server block's `server_name` (needed for the ACME HTTP-01
+  challenge below) and to the port-443 apex block's `server_name` (so
+  nginx's TLS SNI selection resolves it explicitly rather than relying on
+  default-server fallback).
+- The Let's Encrypt cert (`recreobienestar.com`, same `--config-dir` as
+  always — see §12) was expanded via `certbot --expand` to add
+  `origin.recreobienestar.com` as a third SAN, alongside the existing
+  `recreobienestar.com`/`www.recreobienestar.com`. New expiry 2026-11-08.
+  Same renewal timer (`certbot-recreobienestar.timer`) covers all three
+  names going forward — nothing new to schedule.
+
+### Why the app itself needed zero other changes
+
+CloudFront's origin request policy is **AllViewer** (forwards the real
+viewer `Host` header), not the default AllViewerExceptHostHeader. nginx and
+Django therefore see `Host: recreobienestar.com` / `www.recreobienestar.com`
+exactly as before — `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`,
+`SECURE_PROXY_SSL_HEADER`, and cookie behavior in `config/settings.py` are
+all untouched and were re-validated working end-to-end (sessions, CSRF
+POSTs, admin login, API, membership-gated video access) both through
+CloudFront's `*.cloudfront.net` domain before cutover and through the
+public domain after.
+
+### Origin protection — two failed attempts, then a working design
+
+The EC2 origin's security group (`prueba`, in `terraform-prod`) originally
+allowed `0.0.0.0/0` on 80/443. Restricting 443 to CloudFront's
+origin-facing IP range took three tries:
+
+1. Restrict both 80 and 443 directly on `prueba` → failed
+   (`RulesPerSecurityGroupLimitExceeded`), and briefly took the site fully
+   offline (Terraform revokes old rules before authorizing new ones).
+   Reverted immediately. Restricting 80 was wrong on the merits anyway —
+   CloudFront never uses port 80 (origin is HTTPS-only), and Let's
+   Encrypt's HTTP-01 renewal needs it open (connects from its own IPs, not
+   CloudFront's).
+2. Restrict 443 only on `prueba` → failed with the same error and the same
+   brief outage, despite the math (10 other rules + the prefix list's 45
+   visible entries = 55, under the account's 60-rule-per-SG quota) looking
+   fine. Reverted immediately.
+3. Root cause, found by testing on a disposable, unattached security
+   group: AWS-managed prefix lists can consume more of the 60-rule quota
+   than their visible entry count suggests (undocumented reserved
+   headroom) — a lone rule referencing the list fit fine in isolation, the
+   same rule alongside ~11 other rules did not. **Fix**: a dedicated,
+   otherwise-empty security group (`web_cloudfront_origin`) holding only
+   the CloudFront-restricted 443 rule, attached to the instance
+   *additionally* (SG rules are additive). Rolled out in two verified
+   steps — create+attach the dedicated SG first (no effect on its own),
+   confirm nothing changed, then remove `prueba`'s own 443 rule (now
+   redundant) in a separate apply. No gap this time since the dedicated
+   SG's coverage already existed before the old rule was removed.
+
+Full narrative and the exact Terraform is in `terraform-prod/
+security_groups.tf`'s comments on `aws_security_group.prueba` and
+`aws_security_group.web_cloudfront_origin`.
+
+### Current state (verified)
+
+- `origin.recreobienestar.com` → EC2 EIP, HTTPS only, cert SAN includes it.
+- `recreobienestar.com` / `www` → CloudFront alias (Route53).
+- Port 80 on the EC2 SG: still `0.0.0.0/0` (Let's Encrypt renewal).
+- Port 443 on the EC2 SG: **only** reachable from CloudFront's
+  origin-facing prefix list (`web_cloudfront_origin` SG); direct requests
+  to the EIP on 443 time out. Confirmed via `curl --resolve ... :443:<EIP>`
+  after the change (connection times out) and before it (200 OK).
+- SSH (22, `prueba`) and every other existing rule: untouched throughout.
+- No CloudFront access logs, no WAF, no Shield Advanced, no CloudWatch
+  Logs — none enabled, per the explicit cost constraint for this stage.
+
+### Rollback commands
+
+```bash
+# Fastest: reopen direct HTTPS access (from terraform-prod)
+# Add back to aws_security_group.prueba in security_groups.tf:
+#   ingress {
+#     from_port = 443; to_port = 443; protocol = "tcp"
+#     cidr_blocks = ["0.0.0.0/0"]
+#   }
+# then: terraform plan / terraform apply
+# (web_cloudfront_origin can stay attached — SG rules are additive, this
+# just reopens the door prueba used to hold open)
+
+# Full DNS rollback: point the apex/www back at the EC2 EIP directly
+# (in terraform-prod/route53.tf, restore the pre-Stage-B blocks — see the
+# "Previously..." comments left in place on aws_route53_record.
+# recreobienestar_a / recreobienestar_www) then terraform apply.
+# CloudFront/ACM/origin resources don't need to change for this rollback.
+
+# Origin TLS rollback: nothing to revert on this side unless you also want
+# origin.recreobienestar.com removed from the cert — not necessary; an
+# extra unused SAN is harmless.
+```
