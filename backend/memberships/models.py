@@ -10,14 +10,46 @@ from common.models import OrderedActiveModel, TimeStampedModel
 from common.text import generate_unique_slug
 
 
+class MembershipPlanVisualVariant(models.TextChoices):
+    """Which card treatment the home page uses (Phase 3.7 visual
+    reference): a plain default card, the highlighted/"most recommended"
+    mint card, or the dark premium card. Purely presentational — has no
+    effect on access control, which is governed entirely by `tier`."""
+    DEFAULT = 'default', 'Estándar (tarjeta blanca)'
+    HIGHLIGHTED = 'highlighted', 'Destacado (tarjeta menta, "más recomendado")'
+    PREMIUM = 'premium', 'Premium (tarjeta oscura)'
+
+
 class MembershipPlan(OrderedActiveModel, TimeStampedModel):
     tier = models.CharField(
         max_length=20, choices=PlanTier.choices, unique=True,
         help_text='Identificador fijo del plan (no editable desde el admin).',
     )
-    name = models.CharField(max_length=150)
+    name = models.CharField(
+        max_length=150,
+        help_text='Nombre corto/etiqueta mostrada en mayúsculas arriba del título (ej. "Plan Lumbar").',
+    )
+    subtitle = models.CharField(
+        max_length=150, blank=True,
+        help_text='Título grande de la tarjeta (ej. "Alivio Lumbar"). Si se deja vacío, se usa el nombre.',
+    )
     slug = models.SlugField(max_length=170, unique=True, blank=True)
-    description = models.TextField(blank=True)
+    description = models.TextField(
+        blank=True,
+        help_text='Un beneficio por línea — cada línea se muestra como un ítem con tilde en la tarjeta.',
+    )
+    badge = models.CharField(
+        max_length=40, blank=True,
+        help_text='Etiqueta superpuesta arriba de la tarjeta (ej. "Más recomendado"). Vacío = sin etiqueta.',
+    )
+    visual_variant = models.CharField(
+        max_length=20, choices=MembershipPlanVisualVariant.choices,
+        default=MembershipPlanVisualVariant.DEFAULT,
+    )
+    cta_label = models.CharField(
+        max_length=60, blank=True,
+        help_text='Texto del botón (ej. "Empezar alivio"). Vacío = "Sumarme".',
+    )
 
     price = models.DecimalField(
         max_digits=10, decimal_places=2,

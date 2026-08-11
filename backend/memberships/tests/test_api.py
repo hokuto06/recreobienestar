@@ -38,3 +38,19 @@ class MembershipPlanApiTests(APITestCase):
         resp = self.client.get(reverse('plan-list'))
         self.assertIn('count', resp.data)
         self.assertIn('results', resp.data)
+
+    def test_presentation_fields_exposed(self):
+        # Phase 3.7: the visual-reference fields (subtitle/badge/
+        # visual_variant/cta_label) must reach the API — home-dynamic.js
+        # can't render the approved card design without them.
+        self.active.subtitle = 'Alivio Lumbar'
+        self.active.badge = 'Más recomendado'
+        self.active.visual_variant = 'highlighted'
+        self.active.cta_label = 'Empezar alivio'
+        self.active.save()
+        resp = self.client.get(reverse('plan-list'))
+        plan_data = next(p for p in resp.data['results'] if p['name'] == 'Plan Activo')
+        self.assertEqual(plan_data['subtitle'], 'Alivio Lumbar')
+        self.assertEqual(plan_data['badge'], 'Más recomendado')
+        self.assertEqual(plan_data['visual_variant'], 'highlighted')
+        self.assertEqual(plan_data['cta_label'], 'Empezar alivio')

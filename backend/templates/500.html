@@ -2,10 +2,19 @@
 <!--
   Deliberately self-contained: Django renders this with an EMPTY context
   (no request, no user, no messages — see Django's server_error() view),
-  so this page avoids {% url %}, {% static %}, and anything from base.html
-  that assumes normal context is available. Inline styles only, on
-  purpose, so this still renders correctly precisely when something else
-  has already gone wrong.
+  so this page avoids template tags for URLs or static assets, and
+  anything from base.html that assumes normal context is available.
+  Inline styles only, on purpose, so this still renders correctly
+  precisely when something else has already gone wrong.
+
+  Do not write example Django template-tag syntax literally in this
+  comment (curly-percent or curly-hash delimiters): Django's lexer
+  tokenizes the whole file regardless of HTML comment boundaries, so a
+  literal example here is parsed as a real tag. That previously made a
+  zero-argument URL tag reference crash 500.html itself whenever an
+  actual server error tried to render it — the worst possible place for
+  a latent bug to hide, since it only surfaces when something has
+  already gone wrong and masks the real error behind this one.
 -->
 <html lang="es-AR">
 <head>

@@ -8,20 +8,25 @@ from .models import MembershipPlan, Subscription
 @admin.register(MembershipPlan)
 class MembershipPlanAdmin(admin.ModelAdmin):
     list_display = (
-        'name', 'tier', 'price', 'currency', 'duration_days',
+        'name', 'subtitle', 'tier', 'visual_variant', 'badge', 'price', 'currency', 'duration_days',
         'is_active', 'display_order', 'subscriber_count',
     )
     # `price` editable straight from the changelist — Carla's most common
     # edit — still goes through the model's MinValueValidator on save.
     list_editable = ('display_order', 'price')
-    list_filter = ('is_active', 'tier', 'currency')
-    search_fields = ('name', 'description')
+    list_filter = ('is_active', 'tier', 'visual_variant', 'currency')
+    search_fields = ('name', 'subtitle', 'description')
     prepopulated_fields = {'slug': ('name',)}
     readonly_fields = ('created_at', 'updated_at')
     ordering = ('display_order', 'name')
 
     fieldsets = (
-        (None, {'fields': ('tier', 'name', 'slug', 'description')}),
+        (None, {'fields': ('tier', 'name', 'subtitle', 'slug')}),
+        ('Beneficios', {
+            'fields': ('description',),
+            'description': 'Un beneficio por línea. Cada línea aparece como un ítem con tilde en la tarjeta.',
+        }),
+        ('Presentación', {'fields': ('badge', 'visual_variant', 'cta_label')}),
         ('Precio', {'fields': ('price', 'currency', 'duration_days')}),
         ('Visibilidad', {'fields': ('is_active', 'display_order')}),
         ('Fechas', {'fields': ('created_at', 'updated_at'), 'classes': ('collapse',)}),

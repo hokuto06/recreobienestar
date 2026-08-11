@@ -5,11 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}Recreo Bienestar{% endblock %}</title>
 <meta name="robots" content="noindex, follow">
-{# Read by site.js for the favorite-toggle fetch() call. Deliberately a
-   meta tag, not the CSRF cookie: settings.CSRF_COOKIE_HTTPONLY is True on
-   purpose (see its docstring), so no script — including an XSS payload —
-   can read the cookie itself. This tag only exists on pages a legitimate
-   same-origin script already has full DOM access to anyway. #}
+{% comment %}
+Read by site.js for the favorite-toggle fetch() call. Deliberately a
+meta tag, not the CSRF cookie: settings.CSRF_COOKIE_HTTPONLY is True on
+purpose (see its docstring), so no script — including an XSS payload —
+can read the cookie itself. This tag only exists on pages a legitimate
+same-origin script already has full DOM access to anyway.
+
+Note: this must be the block form of Django's comment tag, not the
+shorthand curly-hash form. Django's tag_re (django/template/base.py)
+matches the shorthand without re.DOTALL, so it only recognizes it within
+a single line — spanning it across a newline silently stops it from
+being recognized as a tag at all, and it renders as literal text instead
+of being stripped. The block form used here has no such limit. Do not
+paste either delimiter pair as literal example text anywhere in this
+comment — Django's tokenizer does not nest, so a literal example inside
+this block closes it early exactly like this bug did.
+{% endcomment %}
 <meta name="csrf-token" content="{{ csrf_token }}">
 <link rel="icon" href="{% static 'site/favicon.svg' %}" type="image/svg+xml">
 <link rel="stylesheet" href="{% static 'site/css/style.css' %}">
@@ -24,7 +36,7 @@
   <div class="container nav-bar">
     <a href="/" class="logo">
       <span class="logo-mark" aria-hidden="true">R</span>
-      Recreo Bienestar
+      Recreo<em>Bienestar</em>
     </a>
     <div class="nav-right">
       <nav class="nav-links" data-nav-links aria-label="Navegación principal">
@@ -38,9 +50,9 @@
             <button type="submit" class="btn btn-ghost btn-sm">Cerrar sesión</button>
           </form>
         {% else %}
-          <a href="/#programas">Programas</a>
+          <a href="/#programas-cursos">Programas</a>
           <a href="{% url 'catalog:video_library' %}">Videoteca</a>
-          <a href="/#membresias">Membresías</a>
+          <a href="/#columna-sana">Columna Sana</a>
           <a href="{% url 'accounts:login' %}">Ingresar</a>
           <a class="btn btn-primary" href="{% url 'accounts:register' %}">Registrarme</a>
         {% endif %}

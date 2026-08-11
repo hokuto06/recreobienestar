@@ -9,16 +9,23 @@ from django.db import models
 
 
 class PlanTier(models.TextChoices):
-    """The two initial paid membership plans. Free is not a plan — it's the
-    absence of one, so it's intentionally not a member of this enum."""
+    """The three membership plans (Phase 3.7 added PLAN3 — "Membresía
+    Completa" — alongside the original two). Free is not a plan — it's the
+    absence of one, so it's intentionally not a member of this enum. Tiers
+    are independent, not hierarchical: a Plan 3 subscriber does not
+    automatically get Plan 1/2 access — see memberships.services, which
+    checks the exact tier a video requires (or ALL_PAID for "any paid
+    plan")."""
     PLAN1 = 'plan1', 'Plan de membresía 1'
     PLAN2 = 'plan2', 'Plan de membresía 2'
+    PLAN3 = 'plan3', 'Plan de membresía 3'
 
 
 class VideoAccessLevel(models.TextChoices):
     FREE = 'free', 'Gratuito'
     PLAN1 = PlanTier.PLAN1.value, PlanTier.PLAN1.label
     PLAN2 = PlanTier.PLAN2.value, PlanTier.PLAN2.label
+    PLAN3 = PlanTier.PLAN3.value, PlanTier.PLAN3.label
     ALL_PAID = 'all_paid', 'Todos los planes pagos'
 
 

@@ -26,6 +26,22 @@ class MembershipPlanValidationTests(TestCase):
         plan = MembershipPlan.objects.create(tier='plan1', name='Plan X', price=100)
         self.assertTrue(plan.is_active)
 
+    def test_third_tier_is_valid(self):
+        # Phase 3.7 extended PlanTier to 3 independent tiers (Columna Sana:
+        # Lumbar/Profundo/Integrador) — plan3 must be as valid as plan1/2.
+        plan = MembershipPlan.objects.create(tier='plan3', name='Plan Integrador', price=45000)
+        plan.full_clean()  # Should not raise: 'plan3' is a real PlanTier choice.
+        self.assertEqual(plan.tier, 'plan3')
+
+    def test_presentation_fields_default_blank(self):
+        # New Phase 3.7 fields are all optional — creating a plan the old
+        # way (just tier/name/price) must keep working unchanged.
+        plan = MembershipPlan.objects.create(tier='plan1', name='Plan X', price=100)
+        self.assertEqual(plan.subtitle, '')
+        self.assertEqual(plan.badge, '')
+        self.assertEqual(plan.visual_variant, 'default')
+        self.assertEqual(plan.cta_label, '')
+
 
 class MembershipPlanActivationTests(TestCase):
     def setUp(self):

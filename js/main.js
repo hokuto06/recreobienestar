@@ -145,4 +145,28 @@
     });
   }
 
+  /* ---------- Animación de entrada al hacer scroll (Phase 3.6) ----------
+     Agrega .visible a los elementos .fade-in cuando entran en pantalla —
+     ver css/style.css para la transición. No depende de ninguna
+     biblioteca (a diferencia de la referencia de Carla, que usaba esto
+     mismo vía Lucide/Tailwind); IntersectionObserver es nativo del
+     navegador. Si el elemento ya está visible al cargar (por ejemplo, en
+     una pantalla muy alta), el observer lo marca igual en el primer
+     chequeo, así que nunca queda invisible por error. */
+  if ('IntersectionObserver' in window) {
+    var fadeObserver = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+          fadeObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.1 });
+    document.querySelectorAll('.fade-in').forEach(function (el) { fadeObserver.observe(el); });
+  } else {
+    // Navegadores muy antiguos sin soporte: mostrar todo directamente en
+    // vez de dejarlo invisible para siempre.
+    document.querySelectorAll('.fade-in').forEach(function (el) { el.classList.add('visible'); });
+  }
+
 }());

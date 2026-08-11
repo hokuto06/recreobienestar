@@ -7,7 +7,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from catalog.models import Category, Video
+from catalog.models import Category, Program, Video
 from memberships.models import MembershipPlan, Subscription
 
 User = get_user_model()
@@ -230,3 +230,63 @@ class VideoLibraryQueryCountTests(TestCase):
             small, large,
             f'Query count should not grow with video count (N+1?): {small} vs {large}.',
         )
+
+
+class BaseTemplateRenderingTests(TestCase):
+    """Regression guard for templates/base.html leaking its own Django
+    comment as literal page text (fixed 2026-08-10).
+
+    Cause: a {# ... #} comment spanning multiple lines. Django's tag_re
+    (django/template/base.py) matches {# ... #} without re.DOTALL, so the
+    shorthand only works on a single line — across a newline it silently
+    stops being recognized as a tag at all and renders as literal text
+    instead of being stripped. {% comment %}/{% endcomment %} has no such
+    limit (see base.html for the full explanation), so this suite doesn't
+    assert *why* the old text doesn't appear, just that it — or any other
+    un-stripped template comment — never does, on every route that
+    extends base.html.
+    """
+
+    def setUp(self):
+        self.category = Category.objects.create(name='Pilates')
+        self.program = Program.objects.create(name='Reset 21 días')
+        self.video = Video.objects.create(
+            title='Video libre', youtube_url='https://youtu.be/dQw4w9WgXcQ',
+            category=self.category, is_published=True, access_level='free',
+            program=self.program, display_order=1,
+        )
+
+    def _assert_no_leaked_comment(self, resp):
+        self.assertEqual(resp.status_code, 200)
+        content = resp.content.decode()
+        self.assertNotIn('{#', content)
+        self.assertNotIn('#}', content)
+        self.assertNotIn('Read by site.js', content)
+
+    def test_video_detail_page_has_no_leaked_comment(self):
+        resp = self.client.get(reverse('catalog:video_detail', args=[self.video.slug]))
+        self._assert_no_leaked_comment(resp)
+
+    def test_video_library_page_has_no_leaked_comment(self):
+        resp = self.client.get(reverse('catalog:video_library'))
+        self._assert_no_leaked_comment(resp)
+
+    def test_program_detail_page_has_no_leaked_comment(self):
+        resp = self.client.get(reverse('catalog:program_detail', args=[self.program.slug]))
+        self._assert_no_leaked_comment(resp)
+
+    def test_login_page_has_no_leaked_comment(self):
+        resp = self.client.get(reverse('accounts:login'))
+        self._assert_no_leaked_comment(resp)
+
+    def test_dashboard_page_has_no_leaked_comment(self):
+        user = User.objects.create_user(username='sincomentarios', password='x')
+        self.client.force_login(user)
+        resp = self.client.get(reverse('accounts:dashboard'))
+        self._assert_no_leaked_comment(resp)
+
+    def test_csrf_meta_tag_still_present(self):
+        # The fix must not remove the meta tag the comment was documenting
+        # — site.js's favorite-toggle fetch() reads the CSRF token from it.
+        resp = self.client.get(reverse('catalog:video_library'))
+        self.assertContains(resp, '<meta name="csrf-token" content="')
