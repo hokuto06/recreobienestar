@@ -1,5 +1,5 @@
 <!--
-  Recreo y Bienestar — sitio de demostración funcional.
+  Recreo Bienestar — sitio de demostración funcional.
   Alojado en recreobienestar.com (migrado desde el dominio de prueba
   ya configurados) mientras se define el dominio definitivo de la marca.
   HTML/CSS/JS plano, sin frameworks ni sistema de build.
@@ -9,13 +9,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Recreo y Bienestar | Plataforma de bienestar</title>
-<meta name="description" content="Recreo y Bienestar: videos guiados de movimiento consciente, relajación y hábitos saludables para reconectar con tu cuerpo, a tu ritmo. Una plataforma creada por Carla.">
+<title>Recreo Bienestar | Plataforma de bienestar</title>
+<meta name="description" content="Recreo Bienestar: videos guiados de movimiento consciente, relajación y hábitos saludables para reconectar con tu cuerpo, a tu ritmo. Una plataforma creada por Carla.">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="https://recreobienestar.com/">
 
 <meta property="og:type" content="website">
-<meta property="og:title" content="Recreo y Bienestar | Plataforma de bienestar">
+<meta property="og:title" content="Recreo Bienestar | Plataforma de bienestar">
 <meta property="og:description" content="Videos guiados de movimiento consciente, relajación y hábitos saludables para reconectar con tu cuerpo, a tu ritmo.">
 <meta property="og:url" content="https://recreobienestar.com/">
 <meta property="og:locale" content="es_AR">
@@ -104,7 +104,10 @@
     </div>
   </section>
 
-  <!-- 3. Presentación de Recreo y Bienestar -->
+  <!-- 3. Presentación de Recreo y Bienestar — removed per Carla 2026-08
+       (Fase 3.7): pedido de simplificar la portada. Reversible: sacar el
+       comentario para restaurar la sección tal cual estaba. -->
+  <!--
   <section class="section fade-in" id="sobre-recreo">
     <div class="container split">
       <div class="split-media">
@@ -120,9 +123,10 @@
       </div>
     </div>
   </section>
+  -->
 
-  <!-- 4. Sobre Carla -->
-  <section class="section section--alt fade-in" id="sobre-carla">
+  <!-- 4. Sobre mí (ex "Carla") — fondo blanco (Fase 3.7). -->
+  <section class="section section--white fade-in" id="sobre-carla">
     <div class="container split split--reverse">
       <div class="split-media">
         <div class="avatar-frame">
@@ -131,7 +135,7 @@
       </div>
       <div class="split-copy">
         <span class="eyebrow">Quién guía las sesiones</span>
-        <h2>Carla</h2>
+        <h2>Sobre mí</h2>
         <!-- data-carla-bio: reemplazado por SiteSettings.carla_bio (ya
              sembrada con la biografía real aprobada por Carla — ver la
              migración de datos site_content 0003). Este párrafo es el
@@ -152,12 +156,13 @@
     </div>
   </section>
 
-  <!-- 5. Rutinas guiadas (catalog.Program — colecciones de videos dentro
-       de la videoteca, ej. "Reset 21 días"). Distinto de la sección
-       "Programas y Cursos" más abajo (site_content.Offering — productos
-       de pago único como "Programa Neuro-Postural"): la nav pública
-       apunta a esa otra sección para evitar que dos secciones compitan
-       por la misma etiqueta "Programas" — ver el pedido de Fase 3.7. -->
+  <!-- 5. Rutinas guiadas — removed per Carla 2026-08 (Fase 3.7): pedido
+       de simplificar la portada. Reversible: sacar el comentario para
+       restaurar la sección tal cual estaba. home-dynamic.js ya está
+       preparado para esto — su fetch de /api/programs/ solo corre si
+       encuentra [data-programs-mount] en la página, así que comentar
+       esta sección no deja ningún error de consola. -->
+  <!--
   <section class="section fade-in" id="rutinas">
     <div class="container">
       <div class="section-head">
@@ -170,8 +175,31 @@
       </div>
     </div>
   </section>
+  -->
 
-  <!-- 6. Videoteca (vista previa) -->
+  <!-- 6. Propuestas Estructurales (ex "Acompañamientos de pago único";
+       site_content.Offering — productos de pago único, independientes de
+       las membresías recurrentes; ver el docstring de
+       site_content/models.py). Sin URLs de pago cargadas todavía para
+       los nuevos productos de Fase 3.7 (Fase 4 los conecta):
+       home-dynamic.js muestra el botón igual, marcado como no disponible
+       en vez de ocultarlo. -->
+  <section class="section offerings-section fade-in" id="programas-cursos">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow">Programas y cursos</span>
+        <h2>Propuestas Estructurales</h2>
+        <p>Iniciativas intensivas y cursos con un inicio y un fin, enfocados en tu expansión.</p>
+      </div>
+      <div class="grid grid-3" data-offerings-mount>
+        <p class="placeholder-note">Cargando programas…</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. Videoteca (vista previa) — movida debajo de Propuestas
+       Estructurales (Fase 3.7). Mismo bloque, mismo id/data-videos-mount:
+       home-dynamic.js la sigue completando igual. -->
   <section class="section section--alt fade-in" id="videoteca">
     <div class="container">
       <div class="section-head">
@@ -190,35 +218,21 @@
     </div>
   </section>
 
-  <!-- 7. Programas y Cursos (site_content.Offering — productos de pago
-       único, independientes de las membresías recurrentes; ver el
-       docstring de site_content/models.py). Sin URLs de pago cargadas
-       todavía para los nuevos productos de Fase 3.7 (Fase 4 los conecta):
-       home-dynamic.js muestra el botón igual, marcado como no disponible
-       en vez de ocultarlo. -->
-  <section class="section offerings-section fade-in" id="programas-cursos">
-    <div class="container">
-      <div class="section-head">
-        <span class="eyebrow">Programas y cursos</span>
-        <h2>Acompañamientos de pago único</h2>
-        <p>Programas y recursos puntuales de Carla, independientes de las membresías — se pagan una sola vez.</p>
-      </div>
-      <div class="grid grid-3" data-offerings-mount>
-        <p class="placeholder-note">Cargando programas…</p>
-      </div>
-    </div>
-  </section>
-
   <!-- 8. Membresía Columna Sana (MembershipPlan — acceso recurrente).
-       Título/subtítulo son texto fijo de la sección (no por-plan), igual
-       que en el resto del sitio; las 3 tarjetas sí vienen del backend
-       (MembershipPlan.visual_variant/badge/subtitle/description/
-       cta_label — ver memberships/models.py y home-dynamic.js). -->
-  <section class="section section--alt fade-in" id="columna-sana">
+       Fondo crema (--color-bg, "earth-light" de la paleta de Carla —
+       Fase 3.7). Título/subtítulo son texto fijo de la sección (no
+       por-plan), igual que en el resto del sitio; las 3 tarjetas sí
+       vienen del backend (MembershipPlan.visual_variant/badge/subtitle/
+       description/cta_label — ver memberships/models.py y
+       home-dynamic.js). -->
+  <section class="section fade-in" id="columna-sana">
     <div class="container">
       <div class="section-head section-head--center">
         <span class="eyebrow">Membresías</span>
-        <h2>Membresía Columna Sana</h2>
+        <!-- Título a dos tonos (Fase 3.7): "Membresía" en earth-dark,
+             "Columna Sana" en pool-dark — misma paleta que el resto del
+             sitio, sin variables nuevas. -->
+        <h2><span style="color:var(--color-text-muted)">Membresía</span> <span style="color:var(--color-pool-dark)">Columna Sana</span></h2>
         <p>Prácticas constantes de regulación y movimiento terapéutico diseñadas para tu bienestar neuro-postural.</p>
       </div>
       <div class="grid grid-3" data-plans-mount>
@@ -227,20 +241,24 @@
     </div>
   </section>
 
-  <!-- 9. Podcast -->
-  <section class="section fade-in" id="podcast" data-podcast-section hidden>
+  <!-- 9. Podcast (Fase 3.7). Igual que data-carla-bio: el nombre y la
+       descripción ya están en el HTML como copy final aprobado / respaldo
+       — home-dynamic.js solo los reemplaza si SiteSettings trae un
+       podcast_name distinto. El botón sí depende de que Carla cargue
+       podcast_url: permanece oculto hasta entonces. -->
+  <section class="section fade-in" id="podcast">
     <div class="container" style="max-width:640px;text-align:center;margin-inline:auto">
       <span class="eyebrow">Inspiración</span>
-      <h2>Podcast: <em data-podcast-name></em></h2>
-      <p class="lede" style="margin-top:1rem">Episodios pensados para acompañar tu proceso de regulación y bienestar.</p>
-      <a class="podcast-link" style="margin-top:1.5rem" data-podcast-link target="_blank" rel="noopener">
-        Escuchar <svg><use href="#icon-external-link"></use></svg>
+      <h2 data-podcast-name>El éxito del cuerpo</h2>
+      <p class="lede" style="margin-top:1rem">Episodios semanales diseñados para acompañar tu proceso de regulación y alto rendimiento.</p>
+      <a class="podcast-link" style="margin-top:1.5rem" data-podcast-link target="_blank" rel="noopener" hidden>
+        Escuchar en Spotify <svg><use href="#icon-external-link"></use></svg>
       </a>
     </div>
   </section>
 
-  <!-- 10. Contacto -->
-  <section class="section section--alt fade-in" id="contacto">
+  <!-- 10. Contacto — fondo blanco (Fase 3.7). -->
+  <section class="section section--white fade-in" id="contacto">
     <div class="container contact-grid">
       <div>
         <span class="eyebrow">Contacto</span>
@@ -265,7 +283,13 @@
         </div>
       </div>
 
-      <form class="card" data-contact-form aria-label="Formulario de contacto de demostración">
+      <!-- El formulario sigue siendo visual + funcional, pero honesto
+           sobre lo que hace (Fase 3.7): "Enviar" abre el cliente de
+           correo de quien visita con un mailto: prellenado a
+           recreobienestar@gmail.com — ver js/main.js. No hay backend de
+           envío todavía (fase posterior), así que no se simula un
+           "mensaje enviado" que en realidad no viajó a ningún lado. -->
+      <form class="card" data-contact-form aria-label="Formulario de contacto">
         <div class="field">
           <label for="nombre">Nombre</label>
           <input type="text" id="nombre" name="nombre" autocomplete="name" required>
@@ -279,8 +303,7 @@
           <textarea id="mensaje" name="mensaje" required></textarea>
         </div>
         <button class="btn btn-primary btn-block" type="submit">Enviar mensaje</button>
-        <p class="form-note">Formulario de demostración: los mensajes no se envían todavía a ningún destino real.</p>
-        <p class="form-success" data-form-success>Gracias por tu mensaje. Esta es una demostración: en la versión final, tu consulta llegará directamente a Carla.</p>
+        <p class="form-note">Al enviar, se abre tu programa de correo con el mensaje ya redactado a recreobienestar@gmail.com.</p>
       </form>
     </div>
   </section>
@@ -291,7 +314,7 @@
       <div class="cta-band">
         <span class="badge-preview" style="background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff"><svg style="color:#fff"><use href="#icon-sparkle"></use></svg> Sumate hoy</span>
         <h2>Empezá a practicar a tu ritmo</h2>
-        <p>Creá tu cuenta gratuita y descubrí cómo se siente practicar con Recreo y Bienestar.</p>
+        <p>Creá tu cuenta gratuita y descubrí cómo se siente practicar con Recreo Bienestar.</p>
         <a class="btn btn-primary" href="/registro/">Crear mi cuenta <svg width="16" height="16"><use href="#icon-arrow-right"></use></svg></a>
       </div>
     </div>
@@ -310,7 +333,7 @@
       <div class="footer-col">
         <h4>Explorar</h4>
         <ul>
-          <li><a href="#sobre-recreo">Sobre la plataforma</a></li>
+          <li><a href="#sobre-carla">Sobre mí</a></li>
           <li><a href="#programas-cursos">Programas</a></li>
           <li><a href="#videoteca">Videoteca</a></li>
           <li><a href="#columna-sana">Columna Sana</a></li>
@@ -326,13 +349,12 @@
       <div class="footer-col">
         <h4>Seguinos</h4>
         <ul>
-          <li><a data-instagram-link href="https://www.instagram.com/" target="_blank" rel="noopener" aria-label="Instagram de Recreo y Bienestar"><svg width="16" height="16" style="display:inline;margin-right:6px;vertical-align:-3px"><use href="#icon-instagram"></use></svg>Instagram</a></li>
+          <li><a data-instagram-link href="https://www.instagram.com/" target="_blank" rel="noopener" aria-label="Instagram de Recreo Bienestar"><svg width="16" height="16" style="display:inline;margin-right:6px;vertical-align:-3px"><use href="#icon-instagram"></use></svg>Instagram</a></li>
         </ul>
       </div>
     </div>
     <div class="footer-legal">
-      <span>© 2026 Recreo y Bienestar. Todos los derechos reservados.</span>
-      <span class="demo-note">Sitio de demostración funcional alojado en recreobienestar.com.</span>
+      <span>© 2026 Recreo Bienestar. Todos los derechos reservados.</span>
     </div>
   </div>
 </footer>

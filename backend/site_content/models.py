@@ -62,8 +62,19 @@ class SiteSettings(TimeStampedModel):
 
     def save(self, *args, **kwargs):
         # Enforce the singleton: always row 1, regardless of what created
-        # the instance (admin "add" form, load(), etc.).
+        # the instance (admin "add" form, load(), a freshly-constructed
+        # SiteSettings(...), etc.).
         self.pk = 1
+        # A freshly-constructed instance never had created_at set (it's
+        # auto_now_add, only auto-populated on INSERT) — but pk=1 usually
+        # already exists once the site has been used at all (see the
+        # site_content 0003 seed migration), so this save() becomes an
+        # UPDATE, not an INSERT, and would otherwise overwrite the
+        # existing row's created_at with NULL. Preserve it instead.
+        if self.created_at is None:
+            existing = type(self).objects.filter(pk=1).values_list('created_at', flat=True).first()
+            if existing is not None:
+                self.created_at = existing
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):

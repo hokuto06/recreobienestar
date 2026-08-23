@@ -1,5 +1,5 @@
 /*!
- * Recreo y Bienestar — comportamiento del sitio (demostración)
+ * Recreo Bienestar — comportamiento del sitio (demostración)
  * Vanilla JS, sin dependencias externas.
  * No implementa autenticación real, pagos ni persistencia de datos.
  */
@@ -62,7 +62,7 @@
 
   function loadVideo(facade) {
     var videoId = facade.getAttribute('data-video-id');
-    var title = facade.getAttribute('data-video-title') || 'Video de Recreo y Bienestar';
+    var title = facade.getAttribute('data-video-title') || 'Video de Recreo Bienestar';
     if (!videoId) { return; }
     var iframe = document.createElement('iframe');
     iframe.setAttribute('src', 'https://www.youtube-nocookie.com/embed/' + videoId + '?rel=0&modestbranding=1&playsinline=1&autoplay=1');
@@ -118,18 +118,28 @@
     });
   }
 
-  /* ---------- Formulario de contacto (demostración, sin backend) ---------- */
+  /* ---------- Formulario de contacto (Fase 3.7) ----------
+     Sin backend de envío todavía (fase posterior), así que en vez de
+     simular un "mensaje enviado" que en realidad no viajó a ningún lado,
+     "Enviar" abre el cliente de correo de quien visita con un mailto:
+     prellenado a recreobienestar@gmail.com — honesto sobre lo que
+     realmente pasa al hacer click (ver la nota junto al botón en
+     index.html). */
   var contactForm = document.querySelector('[data-contact-form]');
   if (contactForm) {
     contactForm.addEventListener('submit', function (evt) {
       evt.preventDefault();
-      var successMsg = contactForm.querySelector('[data-form-success]') ||
-        document.querySelector('[data-form-success]');
-      if (successMsg) {
-        successMsg.classList.add('is-visible');
-        successMsg.setAttribute('role', 'status');
-      }
-      contactForm.reset();
+      var nombre = contactForm.querySelector('#nombre');
+      var email = contactForm.querySelector('#email');
+      var mensaje = contactForm.querySelector('#mensaje');
+      var subject = 'Consulta desde recreobienestar.com' +
+        (nombre && nombre.value ? ' — ' + nombre.value : '');
+      var bodyLines = [];
+      if (email && email.value) { bodyLines.push('Correo de contacto: ' + email.value, ''); }
+      if (mensaje && mensaje.value) { bodyLines.push(mensaje.value); }
+      window.location.href = 'mailto:recreobienestar@gmail.com' +
+        '?subject=' + encodeURIComponent(subject) +
+        '&body=' + encodeURIComponent(bodyLines.join('\n'));
     });
   }
 

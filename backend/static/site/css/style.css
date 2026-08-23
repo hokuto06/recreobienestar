@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Recreo y Bienestar — hoja de estilos principal
+   Recreo Bienestar — hoja de estilos principal
    Plataforma de bienestar — demostración
    Paleta cálida, tipografía elegante, componentes redondeados y contenidos.
    Sin dependencias externas (sin CDN, sin frameworks).
@@ -78,12 +78,26 @@ h1, h2, h3, h4, p, figure { margin: 0; }
 
 /* ---------- Design tokens ---------- */
 :root {
-  /* Color — cálida y suave (paleta original, sin tocar) */
-  --color-bg: #FBF5EF;
+  /* Color — cálida y suave (paleta original, sin tocar salvo lo indicado) */
+  /* Reconciliado con la paleta autoritativa de Carla (Fase 3.7): mismos
+     roles, solo se actualizó el valor hex de cada variable que tenía un
+     color equivalente en su paleta ("earth-light"/"earth-text" abajo).
+     --color-bg-alt, --color-border, --color-gold(-light), --color-secondary
+     (-light) y --color-locked no tienen equivalente en la paleta de Carla
+     (pool/mint/earth) — se dejan sin tocar a propósito. */
+  --color-bg: #F7F4F0; /* earth-light (era #FBF5EF) */
   --color-bg-alt: #F3E7D9;
   --color-surface: #FFFFFF;
-  --color-text: #3B2E2A;
-  --color-text-muted: #7A6A62;
+  --color-text: #4A4036; /* earth-text (era #3B2E2A) */
+  --color-text-muted: #8C7A6B; /* earth-dark (era #7A6A62) */
+  /* earth-mid de la paleta de Carla (#D9C8B8): sin variable existente que
+     jugara ese rol sin romper contraste — --color-bg-alt es la más
+     parecida semánticamente, pero textos con --color-text-muted encima
+     (.section-head p, .placeholder-note, etc.) caerían a ~1.6:1 de
+     contraste sobre #D9C8B8, muy por debajo de WCAG AA. Se agrega como
+     variable nueva en vez de forzarla sobre un rol con texto encima;
+     queda disponible para usos puramente decorativos (bordes, acentos). */
+  --color-earth-mid: #D9C8B8;
   /* Primary brand color (Phase 3.7): shifted from the original terracotta
      (#AD5A41/#8F4936/#D98F73 — kept only as a comment for history) to the
      turquoise/pool-blue accent from Carla's approved visual reference.
@@ -174,6 +188,10 @@ p.quote { font-size: 1.3rem; font-weight: 300; font-style: italic; color: var(--
 
 .section { padding-block: var(--space-8); }
 .section--alt { background: var(--color-bg-alt); }
+/* Blanco puro (--color-surface), para secciones que deben destacar sobre
+   el fondo cálido/crema por defecto del body — ej. "Sobre mí" y
+   "Contacto" (Fase 3.7). */
+.section--white { background: var(--color-surface); }
 .section--tight { padding-block: var(--space-6); }
 
 .section-head {

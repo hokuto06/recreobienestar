@@ -19,6 +19,11 @@ class SiteSettingsAdminTests(TestCase):
         self.assertIn(str(obj.pk), resp.url)
 
     def test_changelist_creates_the_row_if_missing(self):
+        # site_content's 0003 migration seeds the singleton on every fresh
+        # DB (mirrors real production, where the row already exists) —
+        # clear it here so this test can still exercise the actual
+        # "missing row" path it's named for.
+        SiteSettings.objects.all().delete()
         self.assertEqual(SiteSettings.objects.count(), 0)
         self.client.get(reverse('admin:site_content_sitesettings_changelist'))
         self.assertEqual(SiteSettings.objects.count(), 1)

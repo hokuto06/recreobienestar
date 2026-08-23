@@ -5,6 +5,11 @@ from site_content.models import Offering, SiteSettings
 
 class SiteSettingsSingletonTests(TestCase):
     def test_load_creates_the_row_on_first_access(self):
+        # site_content's 0003 migration seeds the singleton on every fresh
+        # DB (mirrors real production, where the row already exists) —
+        # clear it here so this test can still exercise the actual "first
+        # access ever" path it's named for.
+        SiteSettings.objects.all().delete()
         self.assertEqual(SiteSettings.objects.count(), 0)
         settings_obj = SiteSettings.load()
         self.assertEqual(settings_obj.pk, 1)

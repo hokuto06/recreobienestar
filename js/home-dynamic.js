@@ -257,13 +257,21 @@
         if (link.closest('.contact-info-item')) { link.textContent = '@' + handle; }
       });
     }
-    if (settings.podcast_url) {
-      var podcastSection = document.querySelector('[data-podcast-section]');
+    // El nombre del podcast sigue el mismo patrón que data-carla-bio: el
+    // HTML ya trae el nombre aprobado como respaldo, y solo se reemplaza
+    // si SiteSettings.podcast_name trae uno distinto. El botón, en
+    // cambio, depende por completo de podcast_url — permanece oculto
+    // (atributo `hidden` en el HTML) hasta que Carla cargue un link.
+    if (settings.podcast_name) {
       var podcastName = document.querySelector('[data-podcast-name]');
+      if (podcastName) { podcastName.textContent = settings.podcast_name; }
+    }
+    if (settings.podcast_url) {
       var podcastLink = document.querySelector('[data-podcast-link]');
-      if (podcastSection) { podcastSection.hidden = false; }
-      if (podcastName) { podcastName.textContent = settings.podcast_name || 'Recreo Bienestar'; }
-      if (podcastLink) { podcastLink.href = settings.podcast_url; }
+      if (podcastLink) {
+        podcastLink.href = settings.podcast_url;
+        podcastLink.hidden = false;
+      }
     }
   }).catch(function () {
     // Silencioso: si falla, la página simplemente conserva el texto de

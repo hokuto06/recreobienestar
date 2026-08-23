@@ -7,6 +7,11 @@ from site_content.models import Offering, SiteSettings
 
 class SiteSettingsApiTests(APITestCase):
     def test_returns_the_singleton_even_if_never_saved(self):
+        # site_content's 0003 migration seeds the singleton on every fresh
+        # DB (mirrors real production, where the row already exists) —
+        # clear it here so this test can still exercise the actual
+        # "never saved" path it's named for.
+        SiteSettings.objects.all().delete()
         self.assertEqual(SiteSettings.objects.count(), 0)
         resp = self.client.get(reverse('site-settings'))
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
