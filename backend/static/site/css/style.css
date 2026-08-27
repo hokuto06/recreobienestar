@@ -345,6 +345,11 @@ p.quote { font-size: 1.3rem; font-weight: 300; font-style: italic; color: var(--
   position: relative;
   padding-block: 0.25rem;
 }
+/* .nav-links a { color: var(--color-text) } (0,1,1) beats .btn-primary's
+   color:#fff (0,1,0), so "Acceder" rendered dark-on-teal (~2.3:1). This
+   scoped override (0,2,1) wins back the white label without touching
+   .nav-links a itself, which real nav links still depend on. */
+.nav-links a.btn-primary { color: #fff; }
 .nav-links a::after {
   content: "";
   position: absolute;
@@ -806,7 +811,12 @@ p.quote { font-size: 1.3rem; font-weight: 300; font-style: italic; color: var(--
   padding: var(--space-5);
 }
 .offering-card:hover { box-shadow: none; } /* el hover cálido no se lee sobre fondo oscuro */
-.offering-name { font-family: var(--font-heading); font-size: 1.7rem; margin-bottom: 0.4rem; }
+/* Color base: sin esto, el <h3> cae en la regla global h1-h4 { color:
+   var(--color-text) } (marrón oscuro) heredando por encima el fondo
+   oscuro de .offerings-section — texto invisible en las tarjetas sin
+   acento (índices 0 y 3 del ciclo en home-dynamic.js). Las variantes
+   --pool/--earth de abajo sobrescriben este valor explícitamente. */
+.offering-name { font-family: var(--font-heading); font-size: 1.7rem; margin-bottom: 0.4rem; color: var(--color-gold-light); }
 .offering-card p.lede { font-size: 0.88rem; font-style: italic; opacity: 0.7; margin: 0 0 var(--space-4); color: inherit; }
 .offering-price { font-family: var(--font-heading); font-size: 1.5rem; color: #fff; margin-bottom: var(--space-4); }
 .offering-actions { display: flex; flex-direction: column; gap: 0.6rem; margin-top: auto; }
