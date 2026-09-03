@@ -173,6 +173,40 @@
     });
   }
 
+  /* ---------- Reseñas (Testimonial — Fase 3.8) ----------
+     A diferencia del resto de las secciones dinámicas, acá "sin datos"
+     no muestra un placeholder de texto: la sección entera (encabezado
+     incluido) se oculta con `hidden` si /api/testimonials/ no trae
+     ninguna reseña activa, o si el fetch falla — nunca queda un
+     carrusel vacío ni un error visible. */
+  var testimonialsSection = document.querySelector('[data-testimonials-section]');
+  var testimonialsMount = document.querySelector('[data-testimonials-mount]');
+  if (testimonialsSection && testimonialsMount) {
+    fetchJSON('/api/testimonials/').then(function (data) {
+      var testimonials = data.results || data;
+      if (!testimonials.length) {
+        testimonialsSection.hidden = true;
+        return;
+      }
+      testimonialsMount.innerHTML = testimonials.map(function (testimonial) {
+        var rating = Math.max(0, Math.min(5, Number(testimonial.rating) || 0));
+        var stars = '';
+        for (var i = 1; i <= 5; i++) {
+          stars += '<span class="star' + (i <= rating ? ' star--filled' : '') + '">★</span>';
+        }
+        return (
+          '<article class="card testimonial-card">' +
+            '<div class="testimonial-stars" role="img" aria-label="Puntaje: ' + rating + ' de 5">' + stars + '</div>' +
+            '<p class="testimonial-text">"' + esc(testimonial.text) + '"</p>' +
+            '<p class="testimonial-author">' + esc(testimonial.author_name) + '</p>' +
+          '</article>'
+        );
+      }).join('');
+    }).catch(function () {
+      testimonialsSection.hidden = true;
+    });
+  }
+
   /* ---------- Programas y Cursos (Offering: productos de pago único) ----------
      Sin link de pago cargado todavía (Fase 4 los conecta): el botón se
      muestra igual, marcado como no disponible en vez de desaparecer —

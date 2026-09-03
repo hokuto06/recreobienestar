@@ -855,6 +855,63 @@ p.quote { font-size: 1.3rem; font-weight: 300; font-style: italic; color: var(--
 .offering-card--earth .offering-actions .is-outline { border-color: var(--color-gold-light); color: var(--color-gold-light); }
 .offering-card--earth .offering-actions .is-outline:hover { background: var(--color-gold-light); color: var(--color-text); }
 
+/* ---------- Reseñas (Testimonial — Phase 3.8) ----------
+   Carrusel horizontal con scroll-snap nativo, sin librería externa. Los
+   nombres de clase usan el prefijo "testimonial-" a propósito, distinto
+   de .testimonial-avatar (círculo de inicial del área de miembras) más
+   abajo — mismo prefijo, propósito no relacionado, sin colisión: esa
+   clase quedó de la sección de Testimonios retirada en Phase 3.6, esta
+   es la nueva sección (con datos reales desde /api/testimonials/). */
+.testimonial-track {
+  display: flex;
+  gap: var(--space-4);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding-left: var(--space-4);
+  padding-bottom: var(--space-3);
+  -webkit-overflow-scrolling: touch;
+}
+.testimonial-track::-webkit-scrollbar { height: 8px; }
+.testimonial-track::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: var(--radius-pill); }
+
+/* Ancho fijo por tarjeta (no % del contenido, sino del propio track, que
+   conserva el ancho del container gracias a overflow-x: auto) — clamp()
+   deja ver ~3 tarjetas completas + un adelanto de la 4ª en desktop, y
+   ronda el 82% del viewport en mobile (una tarjeta casi completa +
+   adelanto de la siguiente). */
+.testimonial-card {
+  scroll-snap-align: start;
+  flex: 0 0 auto;
+  width: clamp(260px, 29%, 340px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+@media (max-width: 760px) {
+  .testimonial-card { width: 82%; }
+}
+
+.testimonial-stars {
+  display: flex;
+  gap: 0.15rem;
+  color: var(--color-border);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+.testimonial-stars .star--filled { color: var(--color-gold); }
+
+.testimonial-text {
+  font-size: 0.98rem;
+  color: var(--color-text-muted);
+  flex-grow: 1;
+}
+
+.testimonial-author {
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
+  color: var(--color-text);
+}
+
 /* ---------- Podcast ---------- */
 .podcast-link {
   display: inline-flex;

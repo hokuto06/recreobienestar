@@ -14,7 +14,7 @@ separate from catalog (Video/Category/Program) and memberships
 """
 from decimal import Decimal
 
-from django.core.validators import MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 from common.models import OrderedActiveModel, TimeStampedModel
@@ -121,3 +121,24 @@ class Offering(OrderedActiveModel, TimeStampedModel):
         if not self.slug:
             self.slug = generate_unique_slug(self, self.name)
         super().save(*args, **kwargs)
+
+
+class Testimonial(OrderedActiveModel, TimeStampedModel):
+    """Reseñas de alumnas/alumnos, cargadas por Carla desde el Admin —
+    mismo patrón editable/publicado que Offering (display_order + is_active
+    heredados de OrderedActiveModel). is_active deliberadamente NO se
+    expone en la API pública (ver serializers.py): sirve solo para que
+    Carla oculte una reseña sin borrarla, no como dato de marketing."""
+    author_name = models.CharField(max_length=150)
+    text = models.TextField(help_text='Texto de la reseña.')
+    rating = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        help_text='Puntaje de 1 a 5 estrellas.',
+    )
+
+    class Meta(OrderedActiveModel.Meta):
+        verbose_name = 'Reseña'
+        verbose_name_plural = 'Reseñas'
+
+    def __str__(self):
+        return f'{self.author_name} ({self.rating}★)'

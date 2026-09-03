@@ -1,6 +1,6 @@
 from django.test import TestCase
 
-from site_content.models import Offering, SiteSettings
+from site_content.models import Offering, SiteSettings, Testimonial
 
 
 class SiteSettingsSingletonTests(TestCase):
@@ -60,3 +60,32 @@ class OfferingModelTests(TestCase):
         second = Offering.objects.create(name='B', price=1, display_order=2)
         first = Offering.objects.create(name='A', price=1, display_order=1)
         self.assertEqual(list(Offering.objects.all()), [first, second])
+
+
+class TestimonialModelTests(TestCase):
+    def test_rating_below_minimum_rejected(self):
+        testimonial = Testimonial(author_name='Alguien', text='Texto', rating=0)
+        with self.assertRaises(Exception):
+            testimonial.full_clean()
+
+    def test_rating_above_maximum_rejected(self):
+        testimonial = Testimonial(author_name='Alguien', text='Texto', rating=6)
+        with self.assertRaises(Exception):
+            testimonial.full_clean()
+
+    def test_valid_rating_accepted(self):
+        testimonial = Testimonial(author_name='Alguien', text='Texto', rating=5)
+        testimonial.full_clean()  # no debe lanzar
+
+    def test_default_ordering_by_display_order(self):
+        # migration 0005 seeds 5 rows on every fresh test DB (display_order
+        # 1-5) — filter to just this test's own rows instead of relying on
+        # Testimonial.objects.all() being exactly these two.
+        second = Testimonial.objects.create(author_name='B', text='x', rating=5, display_order=102)
+        first = Testimonial.objects.create(author_name='A', text='x', rating=5, display_order=101)
+        self.assertEqual(list(Testimonial.objects.filter(pk__in=[first.pk, second.pk])), [first, second])
+
+    def test_str_includes_author_and_rating(self):
+        testimonial = Testimonial.objects.create(author_name='María', text='x', rating=5)
+        self.assertIn('María', str(testimonial))
+        self.assertIn('5', str(testimonial))

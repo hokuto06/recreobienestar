@@ -241,6 +241,23 @@
     </div>
   </section>
 
+  <!-- 8b. Reseñas (Testimonial — Fase 3.8). Carrusel horizontal con
+       scroll-snap, poblado desde /api/testimonials/ (solo reseñas con
+       is_active=True, ordenadas por display_order — ver
+       home-dynamic.js). Si no hay ninguna reseña activa, la sección
+       entera se oculta (hidden) en vez de mostrar un carrusel vacío. -->
+  <section class="section section--alt fade-in" id="resenas" data-testimonials-section>
+    <div class="container">
+      <div class="section-head section-head--center">
+        <span class="eyebrow">Reseñas</span>
+        <h2>Lo que cuentan quienes ya practican</h2>
+      </div>
+      <div class="testimonial-track" data-testimonials-mount>
+        <p class="placeholder-note">Cargando reseñas…</p>
+      </div>
+    </div>
+  </section>
+
   <!-- 9. Podcast (Fase 3.7). Igual que data-carla-bio: el nombre y la
        descripción ya están en el HTML como copy final aprobado / respaldo
        — home-dynamic.js solo los reemplaza si SiteSettings trae un

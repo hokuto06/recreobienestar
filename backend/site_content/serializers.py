@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Offering, SiteSettings
+from .models import Offering, SiteSettings, Testimonial
 
 
 class SiteSettingsSerializer(serializers.ModelSerializer):
@@ -20,3 +20,11 @@ class OfferingSerializer(serializers.ModelSerializer):
             'id', 'name', 'slug', 'description', 'price', 'currency',
             'payment_url_ars', 'payment_url_usd', 'display_order',
         ]
+
+
+class TestimonialSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Testimonial
+        # is_active deliberately excluded: internal visibility toggle,
+        # not marketing content — mirrors why Offering doesn't expose it.
+        fields = ['id', 'author_name', 'text', 'rating', 'display_order']

@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from site_content.models import SiteSettings
+from site_content.models import SiteSettings, Testimonial
 
 User = get_user_model()
 
@@ -40,3 +40,33 @@ class SiteSettingsAdminTests(TestCase):
         self.assertEqual(resp.status_code, 302)
         self.assertEqual(SiteSettings.load().tagline, 'Nueva frase')
         self.assertEqual(SiteSettings.objects.count(), 1)
+
+
+class TestimonialAdminTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user(username='carla_admin2', password='x', is_staff=True, is_superuser=True)
+        self.client.force_login(self.staff)
+        self.testimonial = Testimonial.objects.create(author_name='María', text='Reseña', rating=5)
+
+    def test_changelist_loads(self):
+        resp = self.client.get(reverse('admin:site_content_testimonial_changelist'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'María')
+
+    def test_display_order_and_is_active_are_list_editable(self):
+        # Carla reordena/oculta reseñas inline desde el changelist, sin
+        # entrar al form de edición de cada una.
+        resp = self.client.post(
+            reverse('admin:site_content_testimonial_changelist'),
+            {
+                'form-TOTAL_FORMS': '1', 'form-INITIAL_FORMS': '1',
+                'form-MIN_NUM_FORMS': '0', 'form-MAX_NUM_FORMS': '1000',
+                'form-0-id': str(self.testimonial.pk),
+                'form-0-display_order': '3',
+                '_save': 'Save',
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.testimonial.refresh_from_db()
+        self.assertEqual(self.testimonial.display_order, 3)
+        self.assertFalse(self.testimonial.is_active)  # checkbox omitted = unchecked

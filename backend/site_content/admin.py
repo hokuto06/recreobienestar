@@ -2,7 +2,7 @@ from django.contrib import admin, messages
 from django.shortcuts import redirect
 from django.urls import reverse
 
-from .models import Offering, SiteSettings
+from .models import Offering, SiteSettings, Testimonial
 
 
 @admin.register(SiteSettings)
@@ -70,3 +70,31 @@ class OfferingAdmin(admin.ModelAdmin):
     def deactivate(self, request, queryset):
         updated = queryset.update(is_active=False)
         self.message_user(request, f'{updated} propuesta(s) desactivada(s).', messages.SUCCESS)
+
+
+@admin.register(Testimonial)
+class TestimonialAdmin(admin.ModelAdmin):
+    list_display = ('author_name', 'rating', 'display_order', 'is_active')
+    list_editable = ('display_order', 'is_active')
+    list_filter = ('is_active', 'rating')
+    search_fields = ('author_name', 'text')
+    readonly_fields = ('created_at', 'updated_at')
+    ordering = ('display_order',)
+
+    fieldsets = (
+        (None, {'fields': ('author_name', 'text', 'rating')}),
+        ('Visibilidad', {'fields': ('is_active', 'display_order')}),
+        ('Fechas', {'fields': ('created_at', 'updated_at'), 'classes': ('collapse',)}),
+    )
+
+    actions = ['activate', 'deactivate']
+
+    @admin.action(description='Activar reseñas seleccionadas')
+    def activate(self, request, queryset):
+        updated = queryset.update(is_active=True)
+        self.message_user(request, f'{updated} reseña(s) activada(s).', messages.SUCCESS)
+
+    @admin.action(description='Desactivar reseñas seleccionadas')
+    def deactivate(self, request, queryset):
+        updated = queryset.update(is_active=False)
+        self.message_user(request, f'{updated} reseña(s) desactivada(s).', messages.SUCCESS)

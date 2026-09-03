@@ -2,7 +2,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from site_content.models import Offering, SiteSettings
+from site_content.models import Offering, SiteSettings, Testimonial
 
 
 class SiteSettingsApiTests(APITestCase):
@@ -61,3 +61,43 @@ class OfferingApiTests(APITestCase):
             resp = getattr(self.client, verb)(reverse('offering-list'), {'name': 'Hackeado'})
             self.assertEqual(resp.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
         self.assertFalse(Offering.objects.filter(name='Hackeado').exists())
+
+
+class TestimonialApiTests(APITestCase):
+    def setUp(self):
+        self.active = Testimonial.objects.create(
+            author_name='Reseña Activa', text='Una reseña de prueba.', rating=5, is_active=True,
+        )
+        self.inactive = Testimonial.objects.create(
+            author_name='Reseña Inactiva', text='Oculta por Carla.', rating=2, is_active=False,
+        )
+
+    def test_only_active_testimonials_returned(self):
+        resp = self.client.get(reverse('testimonial-list'))
+        names = [t['author_name'] for t in resp.data['results']]
+        self.assertIn('Reseña Activa', names)
+        self.assertNotIn('Reseña Inactiva', names)
+
+    def test_is_active_not_exposed(self):
+        # is_active es un toggle interno (Carla oculta/muestra desde el
+        # Admin), no contenido de marketing — nunca debe viajar en la
+        # respuesta pública, a diferencia de rating/text/author_name.
+        resp = self.client.get(reverse('testimonial-list'))
+        item = next(t for t in resp.data['results'] if t['author_name'] == 'Reseña Activa')
+        self.assertNotIn('is_active', item)
+
+    def test_write_methods_not_allowed(self):
+        for verb in ('post', 'put', 'patch', 'delete'):
+            resp = getattr(self.client, verb)(reverse('testimonial-list'), {'author_name': 'Hackeado'})
+            self.assertEqual(resp.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertFalse(Testimonial.objects.filter(author_name='Hackeado').exists())
+
+
+class TestimonialSeedMigrationTests(APITestCase):
+    def test_five_seeded_testimonials_present_on_a_fresh_database(self):
+        # No objects created manually in this test — relies purely on
+        # migration 0005_seed_testimonials, which runs when the test DB
+        # is built. Validates the seed migration end-to-end, same as
+        # SiteSettingsApiTests validates 0003 by relying on its seed.
+        resp = self.client.get(reverse('testimonial-list'))
+        self.assertEqual(len(resp.data['results']), 5)
