@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Mis favoritos | Recreo Bienestar{% endblock %}
+{% block content %}
+<section class="container member-hero">
+  <span class="eyebrow">Mi cuenta</span>
+  <h1>Mis favoritos</h1>
+  <p class="lede" style="margin-top:0.5rem">Los videos que guardaste para ver más adelante.</p>
+</section>
+
+<section class="container section--tight">
+  {% if favorites %}
+    <div class="grid grid-3">
+      {% for favorite in favorites %}
+        {% include "catalog/partials/_video_card.html" with video=favorite.video unlocked=favorite.video.unlocked %}
+      {% endfor %}
+    </div>
+
+    {% if is_paginated %}
+      <nav class="pagination" aria-label="Paginación de favoritos">
+        {% if page_obj.has_previous %}
+          <a href="?page={{ page_obj.previous_page_number }}">← Anterior</a>
+        {% endif %}
+        <span class="current">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+          <a href="?page={{ page_obj.next_page_number }}">Siguiente →</a>
+        {% endif %}
+      </nav>
+    {% endif %}
+  {% else %}
+    <div class="empty-state">
+      <h3>Todavía no guardaste ningún video</h3>
+      <p>Buscá el ícono de corazón en cualquier video para agregarlo acá.</p>
+      <a class="btn btn-ghost" href="{% url 'catalog:video_library' %}" style="margin-top:1rem">Ir a la videoteca</a>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

@@ -118,17 +118,28 @@
     });
   }
 
-  /* ---------- Formulario de contacto (demostración, sin backend) ---------- */
+  /* ---------- Formulario de contacto (Fase 3.7) ----------
+     Sin backend de envío todavía (fase posterior), así que en vez de
+     simular un "mensaje enviado" que en realidad no viajó a ningún lado,
+     "Enviar" abre el cliente de correo de quien visita con un mailto:
+     prellenado a recreobienestar@gmail.com — honesto sobre lo que
+     realmente pasa al hacer click (ver la nota junto al botón en
+     index.html). */
   var contactForm = document.querySelector('[data-contact-form]');
   if (contactForm) {
     contactForm.addEventListener('submit', function (evt) {
       evt.preventDefault();
-      var successMsg = contactForm.querySelector('[data-form-success]');
-      if (successMsg) {
-        successMsg.classList.add('is-visible');
-        successMsg.setAttribute('role', 'status');
-      }
-      contactForm.reset();
+      var nombre = contactForm.querySelector('#nombre');
+      var email = contactForm.querySelector('#email');
+      var mensaje = contactForm.querySelector('#mensaje');
+      var subject = 'Consulta desde recreobienestar.com' +
+        (nombre && nombre.value ? ' — ' + nombre.value : '');
+      var bodyLines = [];
+      if (email && email.value) { bodyLines.push('Correo de contacto: ' + email.value, ''); }
+      if (mensaje && mensaje.value) { bodyLines.push(mensaje.value); }
+      window.location.href = 'mailto:recreobienestar@gmail.com' +
+        '?subject=' + encodeURIComponent(subject) +
+        '&body=' + encodeURIComponent(bodyLines.join('\n'));
     });
   }
 
@@ -142,6 +153,30 @@
       evt.preventDefault();
       window.location.href = 'miembros.html';
     });
+  }
+
+  /* ---------- Animación de entrada al hacer scroll (Phase 3.6) ----------
+     Agrega .visible a los elementos .fade-in cuando entran en pantalla —
+     ver css/style.css para la transición. No depende de ninguna
+     biblioteca (a diferencia de la referencia de Carla, que usaba esto
+     mismo vía Lucide/Tailwind); IntersectionObserver es nativo del
+     navegador. Si el elemento ya está visible al cargar (por ejemplo, en
+     una pantalla muy alta), el observer lo marca igual en el primer
+     chequeo, así que nunca queda invisible por error. */
+  if ('IntersectionObserver' in window) {
+    var fadeObserver = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+          fadeObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.1 });
+    document.querySelectorAll('.fade-in').forEach(function (el) { fadeObserver.observe(el); });
+  } else {
+    // Navegadores muy antiguos sin soporte: mostrar todo directamente en
+    // vez de dejarlo invisible para siempre.
+    document.querySelectorAll('.fade-in').forEach(function (el) { el.classList.add('visible'); });
   }
 
 }());

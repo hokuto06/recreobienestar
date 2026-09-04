@@ -1,8 +1,8 @@
 <!--
   Recreo Bienestar — sitio de demostración funcional.
+  Alojado en recreobienestar.com (migrado desde el dominio de prueba
+  ya configurados) mientras se define el dominio definitivo de la marca.
   HTML/CSS/JS plano, sin frameworks ni sistema de build.
-  Actualizá las metaetiquetas og:url y canonical con el dominio final
-  antes de publicar en producción.
 -->
 <!DOCTYPE html>
 <html lang="es-AR">
@@ -12,10 +12,12 @@
 <title>Recreo Bienestar | Plataforma de bienestar</title>
 <meta name="description" content="Recreo Bienestar: videos guiados de movimiento consciente, relajación y hábitos saludables para reconectar con tu cuerpo, a tu ritmo. Una plataforma creada por Carla.">
 <meta name="robots" content="index, follow">
+<link rel="canonical" href="https://recreobienestar.com/">
 
 <meta property="og:type" content="website">
 <meta property="og:title" content="Recreo Bienestar | Plataforma de bienestar">
 <meta property="og:description" content="Videos guiados de movimiento consciente, relajación y hábitos saludables para reconectar con tu cuerpo, a tu ritmo.">
+<meta property="og:url" content="https://recreobienestar.com/">
 <meta property="og:locale" content="es_AR">
 <meta name="twitter:card" content="summary">
 
@@ -44,6 +46,7 @@
   <symbol id="icon-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M13 6l6 6-6 6"/></symbol>
   <symbol id="icon-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5.5c0 4.6-3 7.9-7 9.5-4-1.6-7-4.9-7-9.5V6l7-3z"/><path d="M9 12l2 2 4-4.5"/></symbol>
   <symbol id="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="icon-external-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></symbol>
 </svg>
 
 <!-- 1. Encabezado y navegación -->
@@ -51,17 +54,23 @@
   <div class="container nav-bar">
     <a href="#inicio" class="logo">
       <span class="logo-mark" aria-hidden="true">R</span>
-      Recreo Bienestar
+      Recreo<em>Bienestar</em>
     </a>
 
     <div class="nav-right">
+      <!-- Nav pública, alineada a la referencia visual aprobada por
+           Carla (Fase 3.7): 4 ítems principales + Videoteca/Acceder
+           integrados de forma discreta (nav-link-muted) en vez de
+           competir visualmente con ellos — ver css/style.css. No se
+           quita acceso a Videoteca/Ingresar/Mi cuenta, solo se los
+           jerarquiza distinto. -->
       <nav class="nav-links" data-nav-links aria-label="Navegación principal">
         <a href="#sobre-carla">Sobre Carla</a>
-        <a href="#programas">Programas</a>
-        <a href="#videoteca">Videoteca</a>
-        <a href="#membresias">Membresías</a>
+        <a href="#columna-sana">Columna Sana</a>
+        <a href="#programas-cursos">Programas</a>
         <a href="#contacto">Contacto</a>
-        <a class="btn btn-primary" href="login.html">Acceder</a>
+        <a class="nav-link-muted" href="/videoteca/">Videoteca</a>
+        <a class="btn btn-primary btn-sm" href="/ingresar/">Acceder</a>
       </nav>
 
       <button class="nav-toggle" data-nav-toggle aria-label="Abrir menú de navegación" aria-expanded="false" aria-controls="menu-principal">
@@ -73,31 +82,33 @@
 
 <main id="main">
 
-  <!-- 2. Hero -->
+  <!-- 2. Hero — copy exacto aprobado por Carla (Fase 3.7). El h1 y el
+       quote siguen siendo mount points (data-hero-headline/data-tagline):
+       si Carla carga un valor distinto en SiteSettings desde el Admin,
+       home-dynamic.js lo reemplaza; este texto es lo que se ve mientras
+       tanto y es, a la vez, el copy final aprobado — no un placeholder. -->
   <section class="hero" id="inicio">
-    <div class="container hero-grid">
-      <div class="hero-copy">
-        <span class="eyebrow">Plataforma de bienestar</span>
-        <h1>Un espacio propio para moverte, respirar y estar mejor.</h1>
-        <p class="lede">Recreo Bienestar reúne videos guiados de movimiento consciente, relajación y hábitos saludables, pensados para acompañarte a tu propio ritmo, desde donde estés.</p>
-        <div class="hero-actions">
-          <a class="btn btn-primary" href="#membresias">Conocer las membresías</a>
-          <a class="btn btn-ghost" href="login.html">Ver demo de la plataforma</a>
-        </div>
-        <div class="hero-badges">
-          <span class="hero-badge"><svg><use href="#icon-leaf"></use></svg> Movimiento consciente</span>
-          <span class="hero-badge"><svg><use href="#icon-moon"></use></svg> Relajación guiada</span>
-          <span class="hero-badge"><svg><use href="#icon-clock"></use></svg> A tu propio ritmo</span>
-        </div>
+    <div class="container hero-grid hero-copy">
+      <span class="eyebrow">Recreo Bienestar</span>
+      <h1 data-hero-headline>Estructura para tu <em>expansión</em></h1>
+      <p class="quote" data-tagline>"El éxito no tiene por qué costarte tu cuerpo"</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="#columna-sana">Membresía Columna Sana</a>
+        <a class="btn btn-ghost" href="#contacto">Hacer una consulta</a>
       </div>
-      <div class="hero-visual" aria-hidden="true">
-        <div class="hero-visual-mark">RB</div>
+      <div class="hero-badges">
+        <span class="hero-badge"><svg><use href="#icon-leaf"></use></svg> Movimiento consciente</span>
+        <span class="hero-badge"><svg><use href="#icon-moon"></use></svg> Relajación guiada</span>
+        <span class="hero-badge"><svg><use href="#icon-clock"></use></svg> A tu propio ritmo</span>
       </div>
     </div>
   </section>
 
-  <!-- 3. Presentación de Recreo Bienestar -->
-  <section class="section" id="sobre-recreo">
+  <!-- 3. Presentación de Recreo y Bienestar — removed per Carla 2026-08
+       (Fase 3.7): pedido de simplificar la portada. Reversible: sacar el
+       comentario para restaurar la sección tal cual estaba. -->
+  <!--
+  <section class="section fade-in" id="sobre-recreo">
     <div class="container split">
       <div class="split-media">
         <div class="avatar-frame">
@@ -105,16 +116,17 @@
         </div>
       </div>
       <div class="split-copy">
-        <span class="eyebrow">Qué es Recreo Bienestar</span>
+        <span class="eyebrow">Qué es Recreo y Bienestar</span>
         <h2>Una plataforma pensada para volver a habitar tu cuerpo.</h2>
-        <p class="lede">Recreo Bienestar es un espacio de videos por membresía, guiado por Carla, para practicar movimiento consciente y relajación sin presiones ni comparaciones. Accedés desde tu celular o computadora, cuando lo necesitás.</p>
+        <p class="lede">Recreo y Bienestar es un espacio de videos por membresía, guiado por Carla, para practicar movimiento consciente y relajación sin presiones ni comparaciones. Accedés desde tu celular o computadora, cuando lo necesitás.</p>
         <p style="margin-top:1rem;color:var(--color-text-muted)">Cada sesión está pensada para adaptarse a distintos momentos del día y niveles de energía: no hace falta experiencia previa, solo ganas de darte un rato para vos.</p>
       </div>
     </div>
   </section>
+  -->
 
-  <!-- 4. Sobre Carla -->
-  <section class="section section--alt" id="sobre-carla">
+  <!-- 4. Sobre mí (ex "Carla") — fondo blanco (Fase 3.7). -->
+  <section class="section section--white fade-in" id="sobre-carla">
     <div class="container split split--reverse">
       <div class="split-media">
         <div class="avatar-frame">
@@ -123,370 +135,198 @@
       </div>
       <div class="split-copy">
         <span class="eyebrow">Quién guía las sesiones</span>
-        <h2>Carla</h2>
-        <p class="lede">Carla acompaña las prácticas de movimiento consciente y bienestar de la plataforma, con un enfoque cercano, sereno y respetuoso de los tiempos de cada persona.</p>
-        <div class="placeholder-note">
-          <svg width="15" height="15"><use href="#icon-shield"></use></svg>
-          Biografía completa e información profesional de Carla: próximamente.
+        <h2>Sobre Carla</h2>
+        <!-- data-carla-bio: reemplazado por SiteSettings.carla_bio (ya
+             sembrada con la biografía real aprobada por Carla — ver la
+             migración de datos site_content 0003). Este párrafo es el
+             respaldo solo si esa migración no llegó a correr todavía. -->
+        <div data-carla-bio>
+          <p class="lede">Carla acompaña las prácticas de movimiento consciente y bienestar de la plataforma, con un enfoque cercano, sereno y respetuoso de los tiempos de cada persona.</p>
+          <div class="placeholder-note">
+            <svg width="15" height="15"><use href="#icon-shield"></use></svg>
+            Biografía completa: próximamente.
+          </div>
         </div>
+        <!-- data-carla-bio-highlight: SiteSettings.carla_bio_highlight,
+             tratamiento visual de cita destacada, separado del cuerpo de
+             la biografía. Vacío por defecto -- home-dynamic.js solo lo
+             muestra si Carla cargó un valor. -->
+        <blockquote class="bio-highlight" data-carla-bio-highlight hidden></blockquote>
       </div>
     </div>
   </section>
 
-  <!-- 5. Beneficios y enfoque -->
-  <section class="section" id="beneficios">
-    <div class="container">
-      <div class="section-head section-head--center">
-        <span class="eyebrow">Nuestro enfoque</span>
-        <h2>Bienestar simple, sostenible y sin exigencias</h2>
-        <p>Creemos en prácticas breves y honestas, que se puedan sostener en el tiempo — no en promesas de transformación instantánea.</p>
-      </div>
-      <div class="grid grid-3">
-        <div class="card">
-          <div class="icon-tile"><svg><use href="#icon-clock"></use></svg></div>
-          <h3>A tu propio ritmo</h3>
-          <p>Accedé a los videos cuando quieras, sin horarios fijos ni obligaciones.</p>
-        </div>
-        <div class="card">
-          <div class="icon-tile"><svg><use href="#icon-leaf"></use></svg></div>
-          <h3>Movimiento consciente</h3>
-          <p>Prácticas suaves que priorizan cómo te sentís por sobre cómo te ves.</p>
-        </div>
-        <div class="card">
-          <div class="icon-tile"><svg><use href="#icon-moon"></use></svg></div>
-          <h3>Relajación real</h3>
-          <p>Espacios guiados de respiración y descanso activo para bajar el ritmo.</p>
-        </div>
-        <div class="card">
-          <div class="icon-tile"><svg><use href="#icon-users"></use></svg></div>
-          <h3>Comunidad cercana</h3>
-          <p>Un espacio pensado para mujeres que buscan reconectar con su cuerpo, sin juicios.</p>
-        </div>
-        <div class="card">
-          <div class="icon-tile"><svg><use href="#icon-calendar"></use></svg></div>
-          <h3>Contenido en crecimiento</h3>
-          <p>Nuevas sesiones se suman con el tiempo, ampliando la videoteca disponible.</p>
-        </div>
-        <div class="card">
-          <div class="icon-tile"><svg><use href="#icon-heart"></use></svg></div>
-          <h3>Hábitos saludables</h3>
-          <p>Pequeñas prácticas pensadas para integrarse a tu día a día, sin exigencias.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 6. Programas o propuestas -->
-  <section class="section section--alt" id="programas">
+  <!-- 5. Rutinas guiadas — removed per Carla 2026-08 (Fase 3.7): pedido
+       de simplificar la portada. Reversible: sacar el comentario para
+       restaurar la sección tal cual estaba. home-dynamic.js ya está
+       preparado para esto — su fetch de /api/programs/ solo corre si
+       encuentra [data-programs-mount] en la página, así que comentar
+       esta sección no deja ningún error de consola. -->
+  <!--
+  <section class="section fade-in" id="rutinas">
     <div class="container">
       <div class="section-head">
-        <span class="eyebrow">Propuestas</span>
-        <h2>Programas pensados por tipo de práctica</h2>
-        <p>Cada propuesta agrupa sesiones con un enfoque particular, para que elijas según lo que tu cuerpo necesita hoy.</p>
+        <span class="eyebrow">Videoteca</span>
+        <h2>Rutinas guiadas por tipo de práctica</h2>
+        <p>Cada rutina agrupa sesiones con un enfoque particular, para que elijas según lo que tu cuerpo necesita hoy.</p>
       </div>
-      <div class="grid grid-4">
-        <div class="card program-card">
-          <div class="icon-tile"><svg><use href="#icon-leaf"></use></svg></div>
-          <h3>Movimiento consciente</h3>
-          <p>Secuencias suaves de movimiento para reconectar con el cuerpo y soltar tensión.</p>
-        </div>
-        <div class="card program-card">
-          <div class="icon-tile"><svg><use href="#icon-moon"></use></svg></div>
-          <h3>Relajación y respiración</h3>
-          <p>Prácticas guiadas de respiración y relajación profunda para bajar revoluciones.</p>
-        </div>
-        <div class="card program-card">
-          <div class="icon-tile"><svg><use href="#icon-heart"></use></svg></div>
-          <h3>Rutinas de bienestar</h3>
-          <p>Hábitos breves y sostenibles para incorporar bienestar en el día a día.</p>
-        </div>
-        <div class="card program-card">
-          <span class="tag tag-soon">Próximamente</span>
-          <div class="icon-tile"><svg><use href="#icon-users"></use></svg></div>
-          <h3>Encuentros en vivo</h3>
-          <p>Espacios de práctica compartida en tiempo real, en una próxima etapa de la plataforma.</p>
-        </div>
+      <div class="grid grid-4" data-programs-mount>
+        <p class="placeholder-note">Cargando rutinas…</p>
+      </div>
+    </div>
+  </section>
+  -->
+
+  <!-- 6. Propuestas Estructurales (ex "Acompañamientos de pago único";
+       site_content.Offering — productos de pago único, independientes de
+       las membresías recurrentes; ver el docstring de
+       site_content/models.py). Sin URLs de pago cargadas todavía para
+       los nuevos productos de Fase 3.7 (Fase 4 los conecta):
+       home-dynamic.js muestra el botón igual, marcado como no disponible
+       en vez de ocultarlo. -->
+  <section class="section offerings-section fade-in" id="programas-cursos">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow">Programas y cursos</span>
+        <h2>Propuestas Estructurales</h2>
+        <p>Iniciativas intensivas y cursos con un inicio y un fin, enfocados en tu expansión.</p>
+      </div>
+      <div class="grid grid-3" data-offerings-mount>
+        <p class="placeholder-note">Cargando programas…</p>
       </div>
     </div>
   </section>
 
-  <!-- 7. Videoteca (vista previa) -->
-  <section class="section" id="videoteca">
+  <!-- 7. Videoteca (vista previa) — movida debajo de Propuestas
+       Estructurales (Fase 3.7). Mismo bloque, mismo id/data-videos-mount:
+       home-dynamic.js la sigue completando igual. -->
+  <section class="section section--alt fade-in" id="videoteca">
     <div class="container">
       <div class="section-head">
         <span class="eyebrow">Videoteca</span>
         <h2>Una muestra de las sesiones disponibles</h2>
-        <p>Estos son videos de demostración de Carla. Al suscribirte, accedés a la videoteca completa de la plataforma.</p>
+        <p>Una selección de sesiones destacadas y gratuitas de Carla. Al sumarte a una membresía, accedés a la videoteca completa de la plataforma.</p>
       </div>
 
-      <h3 style="margin-bottom:1rem">Sesiones</h3>
-      <div class="video-row">
-        <article class="video-card" data-locked="false">
-          <div class="video-frame">
-            <span class="lock-chip"><svg><use href="#icon-play"></use></svg> Vista previa</span>
-            <button class="video-facade" type="button" data-video-facade
-              data-video-id="Y7cio6En5xE"
-              data-video-title="Sesión de muestra 1 — Recreo Bienestar"
-              style="background-image:url('https://i.ytimg.com/vi/Y7cio6En5xE/hqdefault.jpg')"
-              aria-label="Reproducir Sesión de muestra 1">
-              <span class="play-btn" aria-hidden="true"><svg><use href="#icon-play"></use></svg></span>
-            </button>
-          </div>
-          <div class="video-meta">
-            <h3>Sesión de muestra 1</h3>
-            <p>Video de demostración — etiqueta temporal.</p>
-          </div>
-        </article>
-
-        <article class="video-card video-locked" data-locked="true">
-          <div class="video-frame">
-            <span class="lock-chip"><svg><use href="#icon-lock"></use></svg> Exclusivo de miembras</span>
-            <button class="video-facade" type="button" data-video-facade
-              data-video-id="u7akWQYTTn4"
-              data-video-title="Sesión de muestra 2 — contenido exclusivo"
-              style="background-image:url('https://i.ytimg.com/vi/u7akWQYTTn4/hqdefault.jpg')"
-              aria-label="Sesión de muestra 2, contenido exclusivo para miembras">
-              <span class="play-btn" aria-hidden="true"><svg><use href="#icon-lock"></use></svg></span>
-            </button>
-          </div>
-          <div class="video-meta">
-            <h3>Sesión de muestra 2</h3>
-            <p>Disponible con membresía activa.</p>
-          </div>
-        </article>
-      </div>
-
-      <h3 style="margin-bottom:1rem">Clips breves</h3>
-      <div class="shorts-row">
-        <article class="video-card" data-locked="false">
-          <div class="video-frame is-vertical">
-            <span class="lock-chip"><svg><use href="#icon-play"></use></svg> Vista previa</span>
-            <button class="video-facade" type="button" data-video-facade
-              data-video-id="8hysBCjFHDQ"
-              data-video-title="Clip breve 1 — Recreo Bienestar"
-              style="background-image:url('https://i.ytimg.com/vi/8hysBCjFHDQ/hqdefault.jpg')"
-              aria-label="Reproducir clip breve 1">
-              <span class="play-btn" aria-hidden="true"><svg><use href="#icon-play"></use></svg></span>
-            </button>
-          </div>
-          <div class="video-meta">
-            <h3>Clip breve 1</h3>
-            <p>Video de demostración.</p>
-          </div>
-        </article>
-
-        <article class="video-card" data-locked="false">
-          <div class="video-frame is-vertical">
-            <span class="lock-chip"><svg><use href="#icon-play"></use></svg> Vista previa</span>
-            <button class="video-facade" type="button" data-video-facade
-              data-video-id="qPTm9r2IPhI"
-              data-video-title="Clip breve 2 — Recreo Bienestar"
-              style="background-image:url('https://i.ytimg.com/vi/qPTm9r2IPhI/hqdefault.jpg')"
-              aria-label="Reproducir clip breve 2">
-              <span class="play-btn" aria-hidden="true"><svg><use href="#icon-play"></use></svg></span>
-            </button>
-          </div>
-          <div class="video-meta">
-            <h3>Clip breve 2</h3>
-            <p>Video de demostración.</p>
-          </div>
-        </article>
-
-        <article class="video-card" data-locked="true">
-          <div class="video-frame is-vertical" style="display:flex;align-items:center;justify-content:center;background:var(--color-bg-alt)">
-            <span class="tag tag-soon">Próximamente</span>
-          </div>
-          <div class="video-meta">
-            <h3>Nuevo clip</h3>
-            <p>Se suma en una próxima actualización.</p>
-          </div>
-        </article>
-
-        <article class="video-card" data-locked="true">
-          <div class="video-frame is-vertical" style="display:flex;align-items:center;justify-content:center;background:var(--color-bg-alt)">
-            <span class="tag tag-soon">Próximamente</span>
-          </div>
-          <div class="video-meta">
-            <h3>Nuevo clip</h3>
-            <p>Se suma en una próxima actualización.</p>
-          </div>
-        </article>
+      <div class="video-row" data-videos-mount>
+        <p class="placeholder-note">Cargando videos…</p>
       </div>
 
       <p style="margin-top:2rem;text-align:center">
-        <a class="btn btn-ghost" href="login.html">Ver la videoteca completa en la demo</a>
+        <a class="btn btn-ghost" href="/videoteca/">Ver la videoteca completa</a>
       </p>
     </div>
   </section>
 
-  <!-- 8. Membresías -->
-  <section class="section section--alt" id="membresias">
+  <!-- 8. Membresía Columna Sana (MembershipPlan — acceso recurrente).
+       Fondo crema (--color-bg, "earth-light" de la paleta de Carla —
+       Fase 3.7). Título/subtítulo son texto fijo de la sección (no
+       por-plan), igual que en el resto del sitio; las 3 tarjetas sí
+       vienen del backend (MembershipPlan.visual_variant/badge/subtitle/
+       description/cta_label — ver memberships/models.py y
+       home-dynamic.js). -->
+  <section class="section fade-in" id="columna-sana">
     <div class="container">
       <div class="section-head section-head--center">
         <span class="eyebrow">Membresías</span>
-        <h2>Planes pensados para distintos ritmos</h2>
-        <p>Los precios se encuentran en definición. Esta sección es una demostración funcional de cómo se presentarán los planes.</p>
+        <!-- Título a dos tonos (Fase 3.7): "Membresía" en earth-dark,
+             "Columna Sana" en pool-dark — misma paleta que el resto del
+             sitio, sin variables nuevas. -->
+        <h2><span style="color:var(--color-text-muted)">Membresía</span> <span style="color:var(--color-pool-dark)">Columna Sana</span></h2>
+        <p>Prácticas constantes de regulación y movimiento terapéutico diseñadas para tu bienestar neuro-postural.</p>
       </div>
-      <div class="grid grid-3">
-        <div class="card plan-card">
-          <span class="plan-name">Esencial</span>
-          <span class="plan-price">A definir<small>Precio en definición</small></span>
-          <ul class="plan-features">
-            <li><svg><use href="#icon-check"></use></svg> Acceso a sesiones destacadas</li>
-            <li><svg><use href="#icon-check"></use></svg> Nuevos videos cada mes</li>
-            <li><svg><use href="#icon-check"></use></svg> Acceso desde cualquier dispositivo</li>
-          </ul>
-          <a class="btn btn-ghost btn-block" href="login.html">Probar la demo</a>
-        </div>
-        <div class="card plan-card is-featured">
-          <span class="tag tag-soon" style="align-self:flex-start;margin-bottom:0.75rem">Más elegido</span>
-          <span class="plan-name">Bienestar</span>
-          <span class="plan-price">A definir<small>Precio en definición</small></span>
-          <ul class="plan-features">
-            <li><svg><use href="#icon-check"></use></svg> Videoteca completa</li>
-            <li><svg><use href="#icon-check"></use></svg> Programas por categoría</li>
-            <li><svg><use href="#icon-check"></use></svg> Seguimiento de progreso</li>
-          </ul>
-          <a class="btn btn-primary btn-block" href="login.html">Probar la demo</a>
-        </div>
-        <div class="card plan-card">
-          <span class="plan-name">Premium</span>
-          <span class="plan-price">A definir<small>Precio en definición</small></span>
-          <ul class="plan-features">
-            <li><svg><use href="#icon-check"></use></svg> Todo lo del plan Bienestar</li>
-            <li><svg><use href="#icon-check"></use></svg> Contenido exclusivo</li>
-            <li><svg><use href="#icon-check"></use></svg> Encuentros en vivo (próximamente)</li>
-          </ul>
-          <a class="btn btn-ghost btn-block" href="login.html">Probar la demo</a>
-        </div>
+      <div class="grid grid-3" data-plans-mount>
+        <p class="placeholder-note">Cargando planes…</p>
       </div>
     </div>
   </section>
 
-  <!-- 9. Testimonios (contenido de demostración) -->
-  <section class="section" id="testimonios">
+  <!-- 8b. Reseñas (Testimonial — Fase 3.8). Carrusel horizontal con
+       scroll-snap, poblado desde /api/testimonials/ (solo reseñas con
+       is_active=True, ordenadas por display_order — ver
+       home-dynamic.js). Si no hay ninguna reseña activa, la sección
+       entera se oculta (hidden) en vez de mostrar un carrusel vacío.
+       Flechas (desktop) y modal "Leer más" (Fase 3.8 — polish) los arma
+       home-dynamic.js sobre este mismo track, sin tocar el mecanismo de
+       scroll-snap nativo. -->
+  <section class="section section--alt fade-in" id="resenas" data-testimonials-section>
     <div class="container">
       <div class="section-head section-head--center">
-        <span class="eyebrow">Testimonios</span>
-        <h2>Lo que dicen quienes practican</h2>
-        <p><span class="badge-preview"><svg><use href="#icon-sparkle"></use></svg> Contenido de ejemplo — testimonios reales próximamente</span></p>
+        <span class="eyebrow">Reseñas</span>
+        <h2>Lo que cuentan quienes ya practican</h2>
       </div>
-      <div class="grid grid-3">
-        <div class="card testimonial-card">
-          <p class="testimonial-quote">"Encontré un ratito para mí que no sabía que necesitaba. Las sesiones son simples y se sienten genuinas."</p>
-          <div class="testimonial-person">
-            <span class="testimonial-avatar">V</span>
-            <div>
-              <div class="testimonial-name">Valentina R.</div>
-              <div class="testimonial-role">Testimonio de ejemplo</div>
-            </div>
-          </div>
+      <div class="testimonial-carousel">
+        <button type="button" class="testimonial-arrow testimonial-arrow--prev" data-testimonial-prev aria-label="Reseña anterior">‹</button>
+        <div class="testimonial-track" data-testimonials-mount>
+          <p class="placeholder-note">Cargando reseñas…</p>
         </div>
-        <div class="card testimonial-card">
-          <p class="testimonial-quote">"Me gusta poder practicar cuando tengo tiempo, sin la presión de un horario fijo."</p>
-          <div class="testimonial-person">
-            <span class="testimonial-avatar">M</span>
-            <div>
-              <div class="testimonial-name">Marina G.</div>
-              <div class="testimonial-role">Testimonio de ejemplo</div>
-            </div>
-          </div>
-        </div>
-        <div class="card testimonial-card">
-          <p class="testimonial-quote">"Las prácticas de respiración se volvieron parte de mi rutina de las noches."</p>
-          <div class="testimonial-person">
-            <span class="testimonial-avatar">L</span>
-            <div>
-              <div class="testimonial-name">Lucía P.</div>
-              <div class="testimonial-role">Testimonio de ejemplo</div>
-            </div>
-          </div>
-        </div>
+        <button type="button" class="testimonial-arrow testimonial-arrow--next" data-testimonial-next aria-label="Reseña siguiente">›</button>
       </div>
     </div>
   </section>
 
-  <!-- 10. Preguntas frecuentes -->
-  <section class="section section--alt" id="preguntas-frecuentes">
-    <div class="container">
-      <div class="section-head">
-        <span class="eyebrow">Preguntas frecuentes</span>
-        <h2>Todo lo que querés saber antes de empezar</h2>
-      </div>
-      <div class="faq-list" data-faq-list>
-        <div class="faq-item" data-faq-item data-open="true">
-          <button class="faq-question" aria-expanded="true">
-            ¿Necesito experiencia previa para empezar?
-            <svg><use href="#icon-plus"></use></svg>
-          </button>
-          <div class="faq-answer"><p>No. Las prácticas están pensadas para adaptarse a distintos niveles, incluyendo a quienes recién empiezan.</p></div>
-        </div>
-        <div class="faq-item" data-faq-item data-open="false">
-          <button class="faq-question" aria-expanded="false">
-            ¿Con qué frecuencia se suben videos nuevos?
-            <svg><use href="#icon-plus"></use></svg>
-          </button>
-          <div class="faq-answer"><p>La videoteca crece de forma progresiva. Por ahora, esta demostración incluye una selección inicial de contenido de Carla.</p></div>
-        </div>
-        <div class="faq-item" data-faq-item data-open="false">
-          <button class="faq-question" aria-expanded="false">
-            ¿Necesito equipamiento especial?
-            <svg><use href="#icon-plus"></use></svg>
-          </button>
-          <div class="faq-answer"><p>No. Alcanza con un espacio cómodo donde puedas moverte con libertad.</p></div>
-        </div>
-        <div class="faq-item" data-faq-item data-open="false">
-          <button class="faq-question" aria-expanded="false">
-            ¿Puedo cancelar mi membresía cuando quiera?
-            <svg><use href="#icon-plus"></use></svg>
-          </button>
-          <div class="faq-answer"><p>Sí, esa es la idea del modelo de membresía. Las condiciones puntuales se definirán antes del lanzamiento definitivo.</p></div>
-        </div>
-        <div class="faq-item" data-faq-item data-open="false">
-          <button class="faq-question" aria-expanded="false">
-            ¿Cómo accedo a los videos luego de suscribirme?
-            <svg><use href="#icon-plus"></use></svg>
-          </button>
-          <div class="faq-answer"><p>Ingresás con tu cuenta desde el botón "Acceder" y encontrás todas las sesiones organizadas por categoría en tu área de miembra.</p></div>
-        </div>
-        <div class="faq-item" data-faq-item data-open="false">
-          <button class="faq-question" aria-expanded="false">
-            ¿Este sitio ya está disponible para inscribirse?
-            <svg><use href="#icon-plus"></use></svg>
-          </button>
-          <div class="faq-answer"><p>Este sitio es una demostración funcional de la plataforma. El acceso, los pagos y las cuentas de usuaria todavía no están activos.</p></div>
-        </div>
-      </div>
+  <!-- Modal de reseña completa (Fase 3.8 — polish). Un solo elemento,
+       reutilizado para todas las tarjetas: home-dynamic.js lo completa
+       con los datos de la reseña clickeada y lo abre con .is-open,
+       mismo patrón que [data-locked-modal] (main.js). -->
+  <div class="modal-overlay testimonial-modal" data-testimonial-modal>
+    <div class="modal-box testimonial-modal-box" role="dialog" aria-modal="true" aria-label="Reseña completa" tabindex="-1" data-testimonial-modal-box>
+      <button type="button" class="modal-close" data-testimonial-modal-close aria-label="Cerrar">✕</button>
+      <div class="testimonial-stars" data-testimonial-modal-stars></div>
+      <p class="testimonial-modal-text" data-testimonial-modal-text></p>
+      <p class="testimonial-author" data-testimonial-modal-author></p>
+    </div>
+  </div>
+
+  <!-- 9. Podcast (Fase 3.7). Igual que data-carla-bio: el nombre y la
+       descripción ya están en el HTML como copy final aprobado / respaldo
+       — home-dynamic.js solo los reemplaza si SiteSettings trae un
+       podcast_name distinto. El botón sí depende de que Carla cargue
+       podcast_url: permanece oculto hasta entonces. -->
+  <section class="section fade-in" id="podcast">
+    <div class="container" style="max-width:640px;text-align:center;margin-inline:auto">
+      <span class="eyebrow">Inspiración</span>
+      <h2 data-podcast-name>El éxito del cuerpo</h2>
+      <p class="lede" style="margin-top:1rem">Episodios semanales diseñados para acompañar tu proceso de regulación y alto rendimiento.</p>
+      <a class="podcast-link" style="margin-top:1.5rem" data-podcast-link target="_blank" rel="noopener" hidden>
+        Escuchar en Spotify <svg><use href="#icon-external-link"></use></svg>
+      </a>
     </div>
   </section>
 
-  <!-- 11. Contacto -->
-  <section class="section" id="contacto">
+  <!-- 10. Contacto — fondo blanco (Fase 3.7). -->
+  <section class="section section--white fade-in" id="contacto">
     <div class="container contact-grid">
       <div>
         <span class="eyebrow">Contacto</span>
         <h2>¿Tenés preguntas? Escribinos</h2>
-        <p class="lede" style="margin-top:0.75rem">Dejanos tu mensaje y te responderemos a la brevedad. Los datos de contacto directo se van a confirmar antes del lanzamiento.</p>
+        <p class="lede" style="margin-top:0.75rem">Dejanos tu mensaje y te responderemos a la brevedad.</p>
 
         <div style="margin-top:2rem">
           <div class="contact-info-item">
             <div class="icon-tile"><svg><use href="#icon-mail"></use></svg></div>
             <div>
               <h3>Correo electrónico</h3>
-              <p>A confirmar (placeholder)</p>
+              <p data-contact-email>A confirmar</p>
             </div>
           </div>
           <div class="contact-info-item">
             <div class="icon-tile"><svg><use href="#icon-instagram"></use></svg></div>
             <div>
               <h3>Instagram</h3>
-              <p>A confirmar (placeholder)</p>
+              <p><a data-instagram-link href="https://www.instagram.com/" target="_blank" rel="noopener">A confirmar</a></p>
             </div>
           </div>
         </div>
       </div>
 
-      <form class="card" data-contact-form aria-label="Formulario de contacto de demostración">
+      <!-- El formulario sigue siendo visual + funcional, pero honesto
+           sobre lo que hace (Fase 3.7): "Enviar" abre el cliente de
+           correo de quien visita con un mailto: prellenado a
+           recreobienestar@gmail.com — ver js/main.js. No hay backend de
+           envío todavía (fase posterior), así que no se simula un
+           "mensaje enviado" que en realidad no viajó a ningún lado. -->
+      <form class="card" data-contact-form aria-label="Formulario de contacto">
         <div class="field">
           <label for="nombre">Nombre</label>
           <input type="text" id="nombre" name="nombre" autocomplete="name" required>
@@ -500,77 +340,63 @@
           <textarea id="mensaje" name="mensaje" required></textarea>
         </div>
         <button class="btn btn-primary btn-block" type="submit">Enviar mensaje</button>
-        <p class="form-note">Formulario de demostración: los mensajes no se envían todavía a ningún destino real.</p>
-        <p class="form-success" data-form-success>Gracias por tu mensaje. Esta es una demostración: en la versión final, tu consulta llegará directamente a Carla.</p>
+        <p class="form-note">Al enviar, se abre tu programa de correo con el mensaje ya redactado a recreobienestar@gmail.com.</p>
       </form>
     </div>
   </section>
 
   <!-- CTA final -->
-  <section class="section">
+  <section class="section fade-in">
     <div class="container">
       <div class="cta-band">
-        <span class="badge-preview" style="background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff"><svg style="color:#fff"><use href="#icon-sparkle"></use></svg> Demostración funcional</span>
-        <h2>Explorá la plataforma en modo demostración</h2>
-        <p>Recorré el área de miembras y descubrí cómo se va a sentir practicar con Recreo Bienestar.</p>
-        <a class="btn btn-primary" href="login.html">Ingresar a la demo <svg width="16" height="16"><use href="#icon-arrow-right"></use></svg></a>
+        <span class="badge-preview" style="background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff"><svg style="color:#fff"><use href="#icon-sparkle"></use></svg> Sumate hoy</span>
+        <h2>Empezá a practicar a tu ritmo</h2>
+        <p>Creá tu cuenta gratuita y descubrí cómo se siente practicar con Recreo Bienestar.</p>
+        <a class="btn btn-primary" href="/registro/">Crear mi cuenta <svg width="16" height="16"><use href="#icon-arrow-right"></use></svg></a>
       </div>
     </div>
   </section>
 
 </main>
 
-<!-- Modal de contenido bloqueado (vista previa pública) -->
-<div class="modal-overlay" data-locked-modal>
-  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-    <button class="modal-close" aria-label="Cerrar"><svg width="16" height="16"><use href="#icon-close"></use></svg></button>
-    <div class="icon-tile" style="background:var(--color-gold-light);color:var(--color-gold);margin-inline:auto"><svg><use href="#icon-lock"></use></svg></div>
-    <h3 id="modal-title">Contenido exclusivo para miembras</h3>
-    <p data-locked-label>Este video se desbloquea con una membresía activa.</p>
-    <a class="btn btn-primary btn-block" href="#membresias">Ver membresías</a>
-  </div>
-</div>
-
-<!-- 12. Footer -->
+<!-- 11. Footer -->
 <footer class="site-footer">
   <div class="container">
     <div class="footer-grid">
       <div class="footer-col footer-brand">
-        <a href="#inicio" class="logo"><span class="logo-mark" aria-hidden="true">R</span> Recreo Bienestar</a>
+        <a href="#inicio" class="logo"><span class="logo-mark" aria-hidden="true">R</span> Recreo<em>Bienestar</em></a>
         <p>Videos guiados de movimiento consciente y bienestar, a tu propio ritmo.</p>
       </div>
       <div class="footer-col">
-        <h3>Explorar</h3>
+        <h4>Explorar</h4>
         <ul>
-          <li><a href="#sobre-recreo">Sobre la plataforma</a></li>
-          <li><a href="#programas">Programas</a></li>
+          <li><a href="#sobre-carla">Sobre Carla</a></li>
+          <li><a href="#programas-cursos">Programas</a></li>
           <li><a href="#videoteca">Videoteca</a></li>
-          <li><a href="#membresias">Membresías</a></li>
+          <li><a href="#columna-sana">Columna Sana</a></li>
         </ul>
       </div>
       <div class="footer-col">
-        <h3>Ayuda</h3>
+        <h4>Ayuda</h4>
         <ul>
-          <li><a href="#preguntas-frecuentes">Preguntas frecuentes</a></li>
           <li><a href="#contacto">Contacto</a></li>
-          <li><a href="login.html">Acceder</a></li>
+          <li><a href="/ingresar/">Acceder</a></li>
         </ul>
       </div>
       <div class="footer-col">
-        <h3>Seguinos</h3>
+        <h4>Seguinos</h4>
         <ul>
-          <li><a href="#" aria-label="Instagram de Recreo Bienestar (placeholder)"><svg width="16" height="16" style="display:inline;margin-right:6px;vertical-align:-3px"><use href="#icon-instagram"></use></svg>Instagram</a></li>
-          <li><a href="#" aria-label="Canal de YouTube de Recreo Bienestar (placeholder)"><svg width="16" height="16" style="display:inline;margin-right:6px;vertical-align:-3px"><use href="#icon-youtube"></use></svg>YouTube</a></li>
+          <li><a data-instagram-link href="https://www.instagram.com/" target="_blank" rel="noopener" aria-label="Instagram de Recreo Bienestar"><svg width="16" height="16" style="display:inline;margin-right:6px;vertical-align:-3px"><use href="#icon-instagram"></use></svg>Instagram</a></li>
         </ul>
       </div>
     </div>
     <div class="footer-legal">
       <span>© 2026 Recreo Bienestar. Todos los derechos reservados.</span>
-      <span class="demo-note">Sitio de demostración funcional — vista previa de producto.</span>
     </div>
   </div>
 </footer>
 
 <script src="js/main.js"></script>
+<script src="js/home-dynamic.js" defer></script>
 </body>
 </html>

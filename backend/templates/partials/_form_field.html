@@ -1,0 +1,15 @@
+{% comment %}
+Expects: field (a BoundField). The "{{ field.name }}-hint" id here must
+match the aria-describedby value set by common.forms.AccessibleFormMixin
+— that mixin sets it from `self.fields` dict keys (the raw field name,
+e.g. "email"), NOT field.id_for_label (which Django prefixes to
+"id_email"). Using field.name on both sides is what keeps them in sync.
+{% endcomment %}
+<div class="field {% if field.errors %}has-error{% endif %}">
+  <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+  {{ field }}
+  <div id="{{ field.name }}-hint">
+    {% if field.help_text %}<span class="helptext">{{ field.help_text }}</span>{% endif %}
+    {{ field.errors }}
+  </div>
+</div>

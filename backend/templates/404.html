@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Página no encontrada | Recreo Bienestar{% endblock %}
+{% block content %}
+<section class="container video-locked-page">
+  <span class="eyebrow">Error 404</span>
+  <h1>No encontramos esta página</h1>
+  <p class="lede" style="margin-top:var(--space-3)">
+    El enlace puede estar roto o la página pudo haberse movido.
+  </p>
+  <div style="margin-top:var(--space-5)">
+    <a class="btn btn-primary" href="/">Volver al inicio</a>
+    <a class="btn btn-ghost" href="{% url 'catalog:video_library' %}">Ir a la videoteca</a>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Videoteca | Recreo Bienestar{% endblock %}
+{% block content %}
+<section class="container member-hero">
+  <span class="eyebrow">Videoteca</span>
+  <h1>Explorá las sesiones de Recreo Bienestar</h1>
+  <p class="lede" style="margin-top:0.5rem;max-width:60ch">
+    Movimiento consciente, relajación y hábitos saludables. Los videos con
+    candado forman parte de un plan de membresía.
+  </p>
+</section>
+
+{% if featured_videos %}
+  <section class="container section--tight">
+    <div class="video-section-title">
+      <h2>Destacados</h2>
+    </div>
+    <div class="grid grid-4">
+      {% for video in featured_videos %}
+        {% include "catalog/partials/_video_card.html" with video=video unlocked=video.unlocked %}
+      {% endfor %}
+    </div>
+  </section>
+{% endif %}
+
+<section class="container section--tight">
+  {% if categories %}
+    <div class="filter-bar category-tabs" role="tablist" aria-label="Categorías">
+      <a class="video-tab" href="?{% if active_program %}program={{ active_program }}{% endif %}{% if active_sort %}&amp;sort={{ active_sort }}{% endif %}" aria-pressed="{% if not active_category %}true{% else %}false{% endif %}">Todas</a>
+      {% for category in categories %}
+        <a class="video-tab"
+           href="?category={{ category.slug }}{% if active_program %}&amp;program={{ active_program }}{% endif %}{% if active_sort %}&amp;sort={{ active_sort }}{% endif %}"
+           aria-pressed="{% if active_category == category.slug %}true{% else %}false{% endif %}">{{ category.name }}</a>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {% if programs %}
+    <div class="filter-bar">
+      <a class="tag {% if not active_program %}tag-soon{% endif %}" href="?{% if active_category %}category={{ active_category }}{% endif %}{% if active_sort %}&amp;sort={{ active_sort }}{% endif %}">Todos los programas</a>
+      {% for program in programs %}
+        <a class="tag {% if active_program == program.slug %}tag-soon{% endif %}"
+           href="?program={{ program.slug }}{% if active_category %}&amp;category={{ active_category }}{% endif %}{% if active_sort %}&amp;sort={{ active_sort }}{% endif %}">{{ program.name }}</a>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="sort-links">
+    <a href="?{% if active_category %}category={{ active_category }}&amp;{% endif %}{% if active_program %}program={{ active_program }}&amp;{% endif %}" aria-current="{% if not active_sort %}true{% else %}false{% endif %}">Recomendados</a>
+    <a href="?sort=newest{% if active_category %}&amp;category={{ active_category }}{% endif %}{% if active_program %}&amp;program={{ active_program }}{% endif %}" aria-current="{% if active_sort == 'newest' %}true{% else %}false{% endif %}">Más nuevos</a>
+  </div>
+
+  {% if page.object_list %}
+    <div class="grid grid-3">
+      {% for video in page.object_list %}
+        {% include "catalog/partials/_video_card.html" with video=video unlocked=video.unlocked %}
+      {% endfor %}
+    </div>
+
+    {% if page.paginator.num_pages > 1 %}
+      <nav class="pagination" aria-label="Paginación de la videoteca">
+        {% if page.has_previous %}
+          <a href="?page={{ page.previous_page_number }}{% if querystring %}&amp;{{ querystring }}{% endif %}">← Anterior</a>
+        {% endif %}
+        <span class="current">Página {{ page.number }} de {{ page.paginator.num_pages }}</span>
+        {% if page.has_next %}
+          <a href="?page={{ page.next_page_number }}{% if querystring %}&amp;{{ querystring }}{% endif %}">Siguiente →</a>
+        {% endif %}
+      </nav>
+    {% endif %}
+  {% else %}
+    <div class="empty-state">
+      <h3>No encontramos videos con estos filtros</h3>
+      <p>Probá con otra categoría o programa.</p>
+      <a class="btn btn-ghost" href="{% url 'catalog:video_library' %}" style="margin-top:1rem">Ver toda la videoteca</a>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

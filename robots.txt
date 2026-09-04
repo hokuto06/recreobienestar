@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /login.html
+Disallow: /miembros.html
+
+Sitemap: https://recreobienestar.com/sitemap.xml

@@ -1,0 +1,207 @@
+/*!
+ * Recreo Bienestar — estilos adicionales para las páginas de miembras
+ * (Django). Se apoya en las variables y clases de css/style.css (copiado
+ * sin modificar desde el sitio estático) en vez de duplicarlas.
+ */
+
+/* ---------- Nav: logout es un <form>, no un <a>, para exigir POST+CSRF.
+   Se muestra igual que el resto del menú. ---------- */
+.nav-logout-form { display: inline-flex; margin: 0; }
+.nav-logout-form button { cursor: pointer; }
+
+/* ---------- Mensajes / alertas (Django messages framework) ---------- */
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.9rem 1.2rem;
+  border-radius: var(--radius-md);
+  font-size: 0.92rem;
+  margin-bottom: var(--space-4);
+  border: 1px solid transparent;
+}
+.alert-success { background: var(--color-secondary-light); color: var(--color-secondary); border-color: var(--color-secondary); }
+.alert-error { background: #FBE9E5; color: var(--color-primary-dark); border-color: var(--color-primary-light); }
+.alert-info, .alert-warning { background: var(--color-gold-light); color: var(--color-gold); border-color: var(--color-gold-light); }
+
+/* ---------- Formularios: errores ---------- */
+.errorlist {
+  list-style: none;
+  padding: 0;
+  margin: 0.35rem 0 0;
+  color: var(--color-primary-dark);
+  font-size: 0.82rem;
+}
+.field.has-error input,
+.field.has-error textarea {
+  border-color: var(--color-primary);
+}
+.helptext {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  margin-top: 0.3rem;
+}
+
+/* ---------- Filtros de la videoteca (enlaces, no botones JS) ---------- */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+/* ---------- Paginación ---------- */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+.pagination a { font-weight: 600; }
+.pagination .current { color: var(--color-text); }
+
+/* ---------- Estado vacío ---------- */
+.empty-state {
+  text-align: center;
+  padding: var(--space-8) var(--space-4);
+  color: var(--color-text-muted);
+}
+.empty-state h3 { color: var(--color-text); margin-bottom: var(--space-2); }
+
+/* ---------- Dashboard ---------- */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--space-5);
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .dashboard-grid { grid-template-columns: 1fr; }
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.8rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.status-pill.is-active { background: var(--color-secondary-light); color: var(--color-secondary); }
+.status-pill.is-inactive { background: #FBE9E5; color: var(--color-primary-dark); }
+
+.video-section-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+/* ---------- Video detalle ---------- */
+.video-detail-frame {
+  position: relative;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-soft);
+  aspect-ratio: 16 / 9;
+  background: #1c1512;
+}
+.video-detail-frame iframe { width: 100%; height: 100%; border: 0; display: block; }
+
+.video-locked-page {
+  text-align: center;
+  max-width: 60ch;
+  margin-inline: auto;
+  padding: var(--space-8) var(--space-4);
+}
+
+/* ---------- Video detalle: encabezado con acciones (favorito/completado) */
+.video-detail-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+.video-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.btn-favorite {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-favorite svg { color: var(--color-text-muted); }
+.btn-favorite.is-active,
+.btn-favorite:hover { border-color: var(--color-primary); }
+.btn-favorite.is-active { color: var(--color-primary); }
+.btn-favorite.is-active svg { color: var(--color-primary); fill: var(--color-primary); }
+
+/* Small heart shown next to a title when the card/list already knows the
+   video is favorited (library, dashboard) — purely decorative, not
+   interactive (use .btn-favorite for the actual toggle). */
+.favorite-mark { color: var(--color-primary); vertical-align: -2px; }
+
+.completed-chip {
+  top: auto;
+  bottom: var(--space-2);
+  background: var(--color-secondary);
+  color: #fff;
+}
+
+.video-neighbors {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  font-size: 0.9rem;
+}
+.video-neighbors a { font-weight: 600; }
+
+/* ---------- Continuar viendo (dashboard) ---------- */
+.continue-watching-row {
+  display: flex;
+  gap: var(--space-4);
+  overflow-x: auto;
+  padding-bottom: var(--space-2);
+}
+.continue-watching-row .video-card { min-width: 220px; flex: 0 0 auto; }
+
+/* ---------- Perfil: resumen de cuenta ---------- */
+.profile-summary dt {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: var(--space-3);
+}
+.profile-summary dd { margin: 0.2rem 0 0; font-size: 1rem; }
+
+/* ---------- Filtros con enlaces de orden (videoteca) ---------- */
+.sort-links {
+  display: flex;
+  gap: var(--space-3);
+  font-size: 0.85rem;
+  margin-bottom: var(--space-4);
+}
+.sort-links a[aria-current="true"] { color: var(--color-primary); font-weight: 600; }

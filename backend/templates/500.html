@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<!--
+  Deliberately self-contained: Django renders this with an EMPTY context
+  (no request, no user, no messages — see Django's server_error() view),
+  so this page avoids template tags for URLs or static assets, and
+  anything from base.html that assumes normal context is available.
+  Inline styles only, on purpose, so this still renders correctly
+  precisely when something else has already gone wrong.
+
+  Do not write example Django template-tag syntax literally in this
+  comment (curly-percent or curly-hash delimiters): Django's lexer
+  tokenizes the whole file regardless of HTML comment boundaries, so a
+  literal example here is parsed as a real tag. That previously made a
+  zero-argument URL tag reference crash 500.html itself whenever an
+  actual server error tried to render it — the worst possible place for
+  a latent bug to hide, since it only surfaces when something has
+  already gone wrong and masks the real error behind this one.
+-->
+<html lang="es-AR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Error del servidor | Recreo Bienestar</title>
+<style>
+  body {
+    background: #FBF5EF; color: #3B2E2A;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; margin: 0; text-align: center; padding: 2rem;
+  }
+  .box { max-width: 480px; }
+  h1 { font-family: Georgia, serif; font-weight: 500; font-size: 1.8rem; }
+  p { color: #7A6A62; line-height: 1.6; }
+  a {
+    display: inline-block; margin-top: 1rem; padding: 0.75rem 1.5rem;
+    background: #AD5A41; color: #fff; text-decoration: none;
+    border-radius: 999px; font-weight: 600;
+  }
+</style>
+</head>
+<body>
+  <div class="box">
+    <h1>Algo salió mal de nuestro lado</h1>
+    <p>Ya estamos al tanto. Probá de nuevo en unos minutos.</p>
+    <a href="/">Volver al inicio</a>
+  </div>
+</body>
+</html>
