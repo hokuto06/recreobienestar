@@ -902,15 +902,89 @@ p.quote { font-size: 1.3rem; font-weight: 300; font-style: italic; color: var(--
 
 .testimonial-text {
   font-size: 0.98rem;
+  line-height: 1.55;
   color: var(--color-text-muted);
   flex-grow: 1;
+  position: relative;
+  max-height: calc(1.55em * 6); /* ~6 líneas — clamp visual, el texto completo
+                                   sigue en el DOM (lo necesita el modal) */
+  overflow: hidden;
 }
+/* Solo cuando home-dynamic.js detecta que el texto excede las 6 líneas
+   (scrollHeight > clientHeight) agrega este modificador: reseñas cortas
+   que ya entran completas no llevan fade ni botón "Leer más". */
+.testimonial-text--clamped::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: calc(1.55em * 2); /* difumina ~2 de las 6 líneas */
+  /* --color-surface porque .testimonial-card hereda el fondo de .card
+     (blanco por defecto) — si la paleta cambia, este fade la sigue. */
+  background: linear-gradient(to bottom, transparent, var(--color-surface) 85%);
+  pointer-events: none;
+}
+
+.testimonial-readmore {
+  align-self: flex-start;
+  margin-top: calc(var(--space-2) * -1);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.testimonial-readmore:hover,
+.testimonial-readmore:focus-visible { text-decoration: underline; }
 
 .testimonial-author {
   font-family: var(--font-heading);
   font-size: 1.15rem;
   color: var(--color-text);
 }
+
+/* ---------- Carrusel de reseñas: flechas (desktop) ---------- */
+.testimonial-carousel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.testimonial-carousel .testimonial-track { flex: 1 1 auto; min-width: 0; }
+
+.testimonial-arrow {
+  flex: 0 0 auto;
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-primary);
+  font-size: 1.4rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: box-shadow 0.2s ease-out, transform 0.2s ease-out;
+}
+.testimonial-arrow:hover { box-shadow: var(--shadow-soft); transform: translateY(-2px); }
+.testimonial-arrow:disabled { opacity: 0.35; cursor: default; box-shadow: none; transform: none; }
+/* El swipe táctil alcanza en mobile/tablet angosto — mismo corte que el
+   ancho de tarjeta mobile (.testimonial-card) más arriba. */
+@media (max-width: 760px) {
+  .testimonial-arrow { display: none; }
+}
+
+/* ---------- Modal de reseña completa ---------- */
+.testimonial-modal-box { max-width: 480px; text-align: left; }
+.testimonial-modal-box .testimonial-stars { justify-content: center; margin-bottom: var(--space-3); }
+.testimonial-modal-text {
+  color: var(--color-text-muted);
+  white-space: pre-line;
+  margin-bottom: var(--space-4);
+}
+.testimonial-modal-box .testimonial-author { text-align: center; }
 
 /* ---------- Podcast ---------- */
 .podcast-link {

@@ -181,6 +181,83 @@
      carrusel vacío ni un error visible. */
   var testimonialsSection = document.querySelector('[data-testimonials-section]');
   var testimonialsMount = document.querySelector('[data-testimonials-mount]');
+  var testimonialsTrack = document.querySelector('.testimonial-carousel .testimonial-track');
+  var testimonialPrevBtn = document.querySelector('[data-testimonial-prev]');
+  var testimonialNextBtn = document.querySelector('[data-testimonial-next]');
+  var testimonialModal = document.querySelector('[data-testimonial-modal]');
+
+  function starsMarkup(rating) {
+    var out = '';
+    for (var i = 1; i <= 5; i++) {
+      out += '<span class="star' + (i <= rating ? ' star--filled' : '') + '">★</span>';
+    }
+    return out;
+  }
+
+  /* ---------- Modal "Leer más" (un solo elemento, reutilizado) ----------
+     Sigue el mismo patrón que [data-locked-modal] en main.js: .is-open
+     alterna display via CSS, Escape/backdrop/botón cierran. Acá además
+     se mueve el foco al abrir/cerrar (accesibilidad) y se bloquea el
+     scroll del body mientras está abierto. */
+  var testimonialModalLastFocus = null;
+  function openTestimonialModal(testimonial, triggerEl) {
+    if (!testimonialModal) { return; }
+    var rating = Math.max(0, Math.min(5, Number(testimonial.rating) || 0));
+    var starsEl = testimonialModal.querySelector('[data-testimonial-modal-stars]');
+    var textEl = testimonialModal.querySelector('[data-testimonial-modal-text]');
+    var authorEl = testimonialModal.querySelector('[data-testimonial-modal-author]');
+    if (starsEl) {
+      starsEl.setAttribute('role', 'img');
+      starsEl.setAttribute('aria-label', 'Puntaje: ' + rating + ' de 5');
+      starsEl.innerHTML = starsMarkup(rating);
+    }
+    if (textEl) { textEl.textContent = '"' + (testimonial.text == null ? '' : String(testimonial.text)) + '"'; }
+    if (authorEl) { authorEl.textContent = testimonial.author_name == null ? '' : String(testimonial.author_name); }
+    testimonialModalLastFocus = triggerEl || null;
+    testimonialModal.classList.add('is-open');
+    document.body.style.overflow = 'hidden';
+    var box = testimonialModal.querySelector('[data-testimonial-modal-box]');
+    if (box) { box.focus(); }
+  }
+  function closeTestimonialModal() {
+    if (!testimonialModal || !testimonialModal.classList.contains('is-open')) { return; }
+    testimonialModal.classList.remove('is-open');
+    document.body.style.overflow = '';
+    if (testimonialModalLastFocus) { testimonialModalLastFocus.focus(); }
+    testimonialModalLastFocus = null;
+  }
+  if (testimonialModal) {
+    testimonialModal.addEventListener('click', function (evt) {
+      if (evt.target === testimonialModal || evt.target.closest('[data-testimonial-modal-close]')) {
+        closeTestimonialModal();
+      }
+    });
+    document.addEventListener('keydown', function (evt) {
+      if (evt.key === 'Escape') { closeTestimonialModal(); }
+    });
+  }
+
+  /* ---------- Flechas del carrusel (desktop) ----------
+     Solo scrollBy() sobre el mismo overflow-x/scroll-snap ya existente
+     (.testimonial-track) — no reemplazan ni reimplementan el mecanismo
+     de scroll nativo, así que el swipe táctil sigue funcionando igual. */
+  function updateTestimonialArrows() {
+    if (!testimonialsTrack || !testimonialPrevBtn || !testimonialNextBtn) { return; }
+    var maxScroll = testimonialsTrack.scrollWidth - testimonialsTrack.clientWidth;
+    testimonialPrevBtn.disabled = testimonialsTrack.scrollLeft <= 1;
+    testimonialNextBtn.disabled = testimonialsTrack.scrollLeft >= maxScroll - 1;
+  }
+  if (testimonialsTrack && testimonialPrevBtn && testimonialNextBtn) {
+    testimonialPrevBtn.addEventListener('click', function () {
+      testimonialsTrack.scrollBy({ left: -testimonialsTrack.clientWidth * 0.9, behavior: 'smooth' });
+    });
+    testimonialNextBtn.addEventListener('click', function () {
+      testimonialsTrack.scrollBy({ left: testimonialsTrack.clientWidth * 0.9, behavior: 'smooth' });
+    });
+    testimonialsTrack.addEventListener('scroll', updateTestimonialArrows);
+    window.addEventListener('resize', updateTestimonialArrows);
+  }
+
   if (testimonialsSection && testimonialsMount) {
     fetchJSON('/api/testimonials/').then(function (data) {
       var testimonials = data.results || data;
@@ -188,20 +265,40 @@
         testimonialsSection.hidden = true;
         return;
       }
-      testimonialsMount.innerHTML = testimonials.map(function (testimonial) {
+      testimonialsMount.innerHTML = testimonials.map(function (testimonial, index) {
         var rating = Math.max(0, Math.min(5, Number(testimonial.rating) || 0));
-        var stars = '';
-        for (var i = 1; i <= 5; i++) {
-          stars += '<span class="star' + (i <= rating ? ' star--filled' : '') + '">★</span>';
-        }
         return (
           '<article class="card testimonial-card">' +
-            '<div class="testimonial-stars" role="img" aria-label="Puntaje: ' + rating + ' de 5">' + stars + '</div>' +
-            '<p class="testimonial-text">"' + esc(testimonial.text) + '"</p>' +
+            '<div class="testimonial-stars" role="img" aria-label="Puntaje: ' + rating + ' de 5">' + starsMarkup(rating) + '</div>' +
+            '<p class="testimonial-text" data-testimonial-text>"' + esc(testimonial.text) + '"</p>' +
+            '<button type="button" class="testimonial-readmore" data-testimonial-readmore data-testimonial-index="' + index + '" hidden>Leer más</button>' +
             '<p class="testimonial-author">' + esc(testimonial.author_name) + '</p>' +
           '</article>'
         );
       }).join('');
+
+      /* El clamp de 6 líneas (CSS) ya está aplicado a todas las tarjetas;
+         acá solo se decide, tarjeta por tarjeta, si el texto lo desborda
+         — de ser así se agrega el fade + se muestra "Leer más". Las
+         reseñas cortas quedan intactas. requestAnimationFrame para medir
+         después de que el layout ya se pintó. */
+      window.requestAnimationFrame(function () {
+        testimonialsMount.querySelectorAll('[data-testimonial-text]').forEach(function (textEl) {
+          if (textEl.scrollHeight > textEl.clientHeight + 1) {
+            textEl.classList.add('testimonial-text--clamped');
+            var readMoreBtn = textEl.parentElement.querySelector('[data-testimonial-readmore]');
+            if (readMoreBtn) { readMoreBtn.hidden = false; }
+          }
+        });
+        updateTestimonialArrows();
+      });
+
+      testimonialsMount.addEventListener('click', function (evt) {
+        var trigger = evt.target.closest('[data-testimonial-readmore]');
+        if (!trigger) { return; }
+        var idx = Number(trigger.getAttribute('data-testimonial-index'));
+        if (testimonials[idx]) { openTestimonialModal(testimonials[idx], trigger); }
+      });
     }).catch(function () {
       testimonialsSection.hidden = true;
     });

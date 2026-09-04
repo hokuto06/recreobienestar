@@ -245,18 +245,38 @@
        scroll-snap, poblado desde /api/testimonials/ (solo reseñas con
        is_active=True, ordenadas por display_order — ver
        home-dynamic.js). Si no hay ninguna reseña activa, la sección
-       entera se oculta (hidden) en vez de mostrar un carrusel vacío. -->
+       entera se oculta (hidden) en vez de mostrar un carrusel vacío.
+       Flechas (desktop) y modal "Leer más" (Fase 3.8 — polish) los arma
+       home-dynamic.js sobre este mismo track, sin tocar el mecanismo de
+       scroll-snap nativo. -->
   <section class="section section--alt fade-in" id="resenas" data-testimonials-section>
     <div class="container">
       <div class="section-head section-head--center">
         <span class="eyebrow">Reseñas</span>
         <h2>Lo que cuentan quienes ya practican</h2>
       </div>
-      <div class="testimonial-track" data-testimonials-mount>
-        <p class="placeholder-note">Cargando reseñas…</p>
+      <div class="testimonial-carousel">
+        <button type="button" class="testimonial-arrow testimonial-arrow--prev" data-testimonial-prev aria-label="Reseña anterior">‹</button>
+        <div class="testimonial-track" data-testimonials-mount>
+          <p class="placeholder-note">Cargando reseñas…</p>
+        </div>
+        <button type="button" class="testimonial-arrow testimonial-arrow--next" data-testimonial-next aria-label="Reseña siguiente">›</button>
       </div>
     </div>
   </section>
+
+  <!-- Modal de reseña completa (Fase 3.8 — polish). Un solo elemento,
+       reutilizado para todas las tarjetas: home-dynamic.js lo completa
+       con los datos de la reseña clickeada y lo abre con .is-open,
+       mismo patrón que [data-locked-modal] (main.js). -->
+  <div class="modal-overlay testimonial-modal" data-testimonial-modal>
+    <div class="modal-box testimonial-modal-box" role="dialog" aria-modal="true" aria-label="Reseña completa" tabindex="-1" data-testimonial-modal-box>
+      <button type="button" class="modal-close" data-testimonial-modal-close aria-label="Cerrar">✕</button>
+      <div class="testimonial-stars" data-testimonial-modal-stars></div>
+      <p class="testimonial-modal-text" data-testimonial-modal-text></p>
+      <p class="testimonial-author" data-testimonial-modal-author></p>
+    </div>
+  </div>
 
   <!-- 9. Podcast (Fase 3.7). Igual que data-carla-bio: el nombre y la
        descripción ya están en el HTML como copy final aprobado / respaldo
