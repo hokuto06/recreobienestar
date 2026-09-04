@@ -229,6 +229,13 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.AllowAny'],
     'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.SessionAuthentication'],
     'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],
+    # Scoped to the one view that opts in via throttle_classes/throttle_scope
+    # (site_content.views.ContactMessageCreateView) — no DEFAULT_THROTTLE_
+    # CLASSES key here, so every other endpoint stays unthrottled exactly as
+    # before. Per-IP since that view runs with no authenticated user (see
+    # its docstring): DRF's ScopedRateThrottle falls back to the request's
+    # IP as the throttle key whenever request.user isn't authenticated.
+    'DEFAULT_THROTTLE_RATES': {'contact': '5/hour'},
 }
 if DEBUG:
     REST_FRAMEWORK['DEFAULT_RENDERER_CLASSES'].append('rest_framework.renderers.BrowsableAPIRenderer')

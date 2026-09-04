@@ -9,8 +9,11 @@ admin.site.index_title = 'Panel de administración'
 
 urlpatterns = [
     path(settings.ADMIN_URL, admin.site.urls),
-    # Read-only public API. No write endpoints exist anywhere under this
-    # prefix — see catalog/views.py and memberships/views.py.
+    # Mostly a read-only public API — see catalog/views.py and
+    # memberships/views.py. The one exception is POST /api/contacto/
+    # (site_content.views.ContactMessageCreateView), the public contact
+    # form; see that view's docstring for why it's safe without session
+    # auth/CSRF.
     path('api/', include('config.api_urls')),
     # Public member-facing routes: /registro/, /ingresar/, /salir/,
     # /recuperar-clave/..., /mi-cuenta/... (accounts.urls) and

@@ -2,7 +2,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from site_content.models import Offering, SiteSettings, Testimonial
+from site_content.models import ContactMessage, Offering, SiteSettings, Testimonial
 
 
 class SiteSettingsApiTests(APITestCase):
@@ -101,3 +101,82 @@ class TestimonialSeedMigrationTests(APITestCase):
         # SiteSettingsApiTests validates 0003 by relying on its seed.
         resp = self.client.get(reverse('testimonial-list'))
         self.assertEqual(len(resp.data['results']), 5)
+
+
+class ContactMessageApiTests(APITestCase):
+    def setUp(self):
+        # ContactMessageCreateView is throttled (5/hour per IP, see
+        # settings.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']) via Django's
+        # cache framework, which — unlike the DB — isn't reset between
+        # tests by Django's test runner. Clearing it here gives every test
+        # in this class its own fresh throttle window, regardless of
+        # execution order or how many other tests ran first.
+        from django.core.cache import cache
+        cache.clear()
+
+    def test_valid_submission_saves_a_row(self):
+        resp = self.client.post(reverse('contact-message-create'), {
+            'name': 'Ana', 'email': 'ana@example.com', 'message': 'Quiero más info.',
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(ContactMessage.objects.count(), 1)
+        saved = ContactMessage.objects.get()
+        self.assertEqual(saved.name, 'Ana')
+        self.assertEqual(saved.email, 'ana@example.com')
+        self.assertEqual(saved.message, 'Quiero más info.')
+        self.assertFalse(saved.is_read)
+
+    def test_missing_fields_rejected(self):
+        resp = self.client.post(reverse('contact-message-create'), {}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('name', resp.data)
+        self.assertIn('email', resp.data)
+        self.assertIn('message', resp.data)
+        self.assertEqual(ContactMessage.objects.count(), 0)
+
+    def test_invalid_email_rejected(self):
+        resp = self.client.post(reverse('contact-message-create'), {
+            'name': 'Ana', 'email': 'no-es-un-email', 'message': 'Hola',
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('email', resp.data)
+        self.assertEqual(ContactMessage.objects.count(), 0)
+
+    def test_blank_message_rejected(self):
+        resp = self.client.post(reverse('contact-message-create'), {
+            'name': 'Ana', 'email': 'ana@example.com', 'message': '   ',
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('message', resp.data)
+        self.assertEqual(ContactMessage.objects.count(), 0)
+
+    def test_honeypot_filled_does_not_save_but_looks_like_success(self):
+        resp = self.client.post(reverse('contact-message-create'), {
+            'name': 'Bot', 'email': 'bot@example.com', 'message': 'spam',
+            'website': 'http://spam.example.com',
+        }, format='json')
+        # Same response shape as a real success — a bot gets no signal
+        # that it was caught.
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(ContactMessage.objects.count(), 0)
+
+    def test_is_read_not_writable(self):
+        resp = self.client.post(reverse('contact-message-create'), {
+            'name': 'Ana', 'email': 'ana@example.com', 'message': 'Hola', 'is_read': True,
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertFalse(ContactMessage.objects.get().is_read)
+
+    def test_endpoint_does_not_require_authentication(self):
+        # self.client is a fresh, unauthenticated APIClient — no login/
+        # force_login/force_authenticate anywhere in this test — so a 201
+        # here proves the endpoint accepts a fully anonymous request
+        # instead of silently requiring a session.
+        resp = self.client.post(reverse('contact-message-create'), {
+            'name': 'Anon', 'email': 'anon@example.com', 'message': 'Sin sesión.',
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
+    def test_get_not_allowed(self):
+        resp = self.client.get(reverse('contact-message-create'))
+        self.assertEqual(resp.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)

@@ -320,13 +320,15 @@
         </div>
       </div>
 
-      <!-- El formulario sigue siendo visual + funcional, pero honesto
-           sobre lo que hace (Fase 3.7): "Enviar" abre el cliente de
-           correo de quien visita con un mailto: prellenado a
-           recreobienestar@gmail.com — ver js/main.js. No hay backend de
-           envío todavía (fase posterior), así que no se simula un
-           "mensaje enviado" que en realidad no viajó a ningún lado. -->
-      <form class="card" data-contact-form aria-label="Formulario de contacto">
+      <!-- Fase 3.9: "Enviar" ahora hace POST a /api/contacto/ (ver
+           js/main.js) y persiste el mensaje en la base — ya no abre un
+           mailto:. website es un honeypot anti-bot (oculto visualmente
+           vía .field--honeypot en css/style.css, no type="hidden": un
+           bot que rellena todo lo que encuentra cae en la trampa, un
+           lector de pantalla la ignora por aria-hidden); si llega con
+           contenido, el backend responde éxito igual pero no guarda
+           nada (ver ContactMessageCreateView). -->
+      <form class="card" data-contact-form aria-label="Formulario de contacto" novalidate>
         <div class="field">
           <label for="nombre">Nombre</label>
           <input type="text" id="nombre" name="nombre" autocomplete="name" required>
@@ -339,8 +341,13 @@
           <label for="mensaje">Mensaje</label>
           <textarea id="mensaje" name="mensaje" required></textarea>
         </div>
+        <div class="field field--honeypot" aria-hidden="true">
+          <label for="website">Sitio web</label>
+          <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+        </div>
         <button class="btn btn-primary btn-block" type="submit">Enviar mensaje</button>
-        <p class="form-note">Al enviar, se abre tu programa de correo con el mensaje ya redactado a recreobienestar@gmail.com.</p>
+        <p class="form-note">Tus datos se usan únicamente para responder tu consulta y no se comparten con terceros.</p>
+        <p class="form-status" data-contact-status role="status" aria-live="polite"></p>
       </form>
     </div>
   </section>

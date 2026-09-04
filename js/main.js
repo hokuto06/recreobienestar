@@ -118,28 +118,70 @@
     });
   }
 
-  /* ---------- Formulario de contacto (Fase 3.7) ----------
-     Sin backend de envío todavía (fase posterior), así que en vez de
-     simular un "mensaje enviado" que en realidad no viajó a ningún lado,
-     "Enviar" abre el cliente de correo de quien visita con un mailto:
-     prellenado a recreobienestar@gmail.com — honesto sobre lo que
-     realmente pasa al hacer click (ver la nota junto al botón en
-     index.html). */
+  /* ---------- Formulario de contacto (Fase 3.9) ----------
+     Ya no es un mailto: — "Enviar" hace POST a /api/contacto/ (ver
+     site_content.views.ContactMessageCreateView en el backend), que
+     persiste el mensaje. Público y sin sesión a propósito (ver el
+     docstring de esa vista): no hace falta CSRF token porque la vista
+     nunca se autentica por sesión, así que no hay nada que exceptuar acá
+     ni en ninguna otra parte del sitio. #website es el honeypot (oculto
+     vía .field--honeypot en css/style.css) — si viene con contenido, el
+     backend responde éxito igual pero no guarda nada, así que del lado
+     del navegador no hay nada especial que hacer con él más que
+     mandarlo tal cual. */
   var contactForm = document.querySelector('[data-contact-form]');
   if (contactForm) {
+    var contactStatus = contactForm.querySelector('[data-contact-status]');
+    var contactSubmitBtn = contactForm.querySelector('button[type="submit"]');
+
+    function showContactStatus(kind, text) {
+      if (!contactStatus) { return; }
+      contactStatus.textContent = text;
+      contactStatus.className = 'form-status is-visible form-status--' + kind;
+    }
+
     contactForm.addEventListener('submit', function (evt) {
       evt.preventDefault();
       var nombre = contactForm.querySelector('#nombre');
       var email = contactForm.querySelector('#email');
       var mensaje = contactForm.querySelector('#mensaje');
-      var subject = 'Consulta desde recreobienestar.com' +
-        (nombre && nombre.value ? ' — ' + nombre.value : '');
-      var bodyLines = [];
-      if (email && email.value) { bodyLines.push('Correo de contacto: ' + email.value, ''); }
-      if (mensaje && mensaje.value) { bodyLines.push(mensaje.value); }
-      window.location.href = 'mailto:recreobienestar@gmail.com' +
-        '?subject=' + encodeURIComponent(subject) +
-        '&body=' + encodeURIComponent(bodyLines.join('\n'));
+      var website = contactForm.querySelector('#website');
+
+      // Validación básica en el cliente (UX) — el servidor es la fuente
+      // de verdad y vuelve a validar todo esto igual.
+      var nombreValue = nombre ? nombre.value.trim() : '';
+      var emailValue = email ? email.value.trim() : '';
+      var mensajeValue = mensaje ? mensaje.value.trim() : '';
+      var emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue);
+      if (!nombreValue || !emailValue || !mensajeValue || !emailLooksValid) {
+        showContactStatus('error', 'Completá tu nombre, un correo válido y tu mensaje.');
+        return;
+      }
+
+      if (contactSubmitBtn) { contactSubmitBtn.disabled = true; }
+
+      fetch('/api/contacto/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({
+          name: nombreValue,
+          email: emailValue,
+          message: mensajeValue,
+          website: website ? website.value : '',
+        }),
+      }).then(function (resp) {
+        if (!resp.ok) { throw new Error('bad response: ' + resp.status); }
+        return resp.json();
+      }).then(function () {
+        showContactStatus('success', '¡Gracias! Recibimos tu consulta y te responderemos a la brevedad.');
+        contactForm.reset();
+      }).catch(function () {
+        // Se deja lo ya tipeado sin tocar (no se llama a contactForm.reset())
+        // para que quien escribió no tenga que volver a redactar todo.
+        showContactStatus('error', 'No pudimos enviar tu mensaje. Probá de nuevo en unos minutos.');
+      }).then(function () {
+        if (contactSubmitBtn) { contactSubmitBtn.disabled = false; }
+      });
     });
   }
 

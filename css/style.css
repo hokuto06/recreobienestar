@@ -1040,16 +1040,39 @@ p.quote { font-size: 1.3rem; font-weight: 300; font-style: italic; color: var(--
   color: var(--color-text-muted);
   margin-top: var(--space-3);
 }
-.form-success {
+/* .form-status reemplaza al .form-success sin usar de fases previas
+   (Fase 3.9) — mismo look para el caso de éxito, + una variante de error
+   para cuando falla el POST a /api/contacto/ (ver js/main.js). */
+.form-status {
   display: none;
   margin-top: var(--space-4);
   padding: var(--space-3) var(--space-4);
-  background: var(--color-secondary-light);
-  color: var(--color-secondary);
   border-radius: var(--radius-sm);
   font-size: 0.9rem;
 }
-.form-success.is-visible { display: block; }
+.form-status.is-visible { display: block; }
+.form-status--success { background: var(--color-secondary-light); color: var(--color-secondary); }
+/* Mismo tratamiento neutro/apagado que .tag-locked (más abajo) para "algo
+   no se pudo" — nada de rojo de alarma, consistente con la paleta cálida
+   del resto del sitio. */
+.form-status--error { background: #ECE6DE; color: var(--color-locked); }
+
+/* Honeypot anti-bot del formulario de contacto (Fase 3.9): oculto para
+   quien ve la página (y para lectoras de pantalla, vía aria-hidden en el
+   wrapper en index.html), pero sigue presente en el DOM/markup para que
+   un bot que completa todos los campos que encuentra caiga en la
+   trampa. Patrón "visually-hidden" en vez de display:none — algunos
+   scrapers simples ya saltean los campos display:none. */
+.field--honeypot {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 
 .contact-info-item {
   display: flex;
