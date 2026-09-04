@@ -1,6 +1,6 @@
 from django.test import TestCase
 
-from site_content.models import Offering, SiteSettings, Testimonial
+from site_content.models import ContactMessage, Offering, SiteSettings, Testimonial
 
 
 class SiteSettingsSingletonTests(TestCase):
@@ -89,3 +89,18 @@ class TestimonialModelTests(TestCase):
         testimonial = Testimonial.objects.create(author_name='María', text='x', rating=5)
         self.assertIn('María', str(testimonial))
         self.assertIn('5', str(testimonial))
+
+
+class ContactMessageModelTests(TestCase):
+    def test_is_read_defaults_to_false(self):
+        msg = ContactMessage.objects.create(name='Ana', email='ana@example.com', message='Hola')
+        self.assertFalse(msg.is_read)
+
+    def test_default_ordering_is_newest_first(self):
+        older = ContactMessage.objects.create(name='Primero', email='a@example.com', message='x')
+        newer = ContactMessage.objects.create(name='Segundo', email='b@example.com', message='x')
+        self.assertEqual(list(ContactMessage.objects.all())[:2], [newer, older])
+
+    def test_str_includes_name(self):
+        msg = ContactMessage.objects.create(name='Ana', email='ana@example.com', message='Hola')
+        self.assertIn('Ana', str(msg))

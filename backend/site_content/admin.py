@@ -2,7 +2,7 @@ from django.contrib import admin, messages
 from django.shortcuts import redirect
 from django.urls import reverse
 
-from .models import Offering, SiteSettings, Testimonial
+from .models import ContactMessage, Offering, SiteSettings, Testimonial
 
 
 @admin.register(SiteSettings)
@@ -98,3 +98,26 @@ class TestimonialAdmin(admin.ModelAdmin):
     def deactivate(self, request, queryset):
         updated = queryset.update(is_active=False)
         self.message_user(request, f'{updated} reseña(s) desactivada(s).', messages.SUCCESS)
+
+
+@admin.register(ContactMessage)
+class ContactMessageAdmin(admin.ModelAdmin):
+    """Read-only submissions from POST /api/contacto/ — Carla only ever
+    toggles is_read here, never edits or creates a message by hand (see
+    has_add_permission below), same spirit as SiteSettingsAdmin disabling
+    actions that don't make sense for its data."""
+    list_display = ('name', 'email', 'created_at', 'is_read')
+    list_editable = ('is_read',)
+    list_filter = ('is_read', 'created_at')
+    search_fields = ('name', 'email', 'message')
+    readonly_fields = ('name', 'email', 'message', 'created_at', 'updated_at')
+    ordering = ('-created_at',)
+
+    fieldsets = (
+        (None, {'fields': ('name', 'email', 'message')}),
+        ('Estado', {'fields': ('is_read',)}),
+        ('Fechas', {'fields': ('created_at', 'updated_at'), 'classes': ('collapse',)}),
+    )
+
+    def has_add_permission(self, request):
+        return False

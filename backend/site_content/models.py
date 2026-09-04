@@ -142,3 +142,29 @@ class Testimonial(OrderedActiveModel, TimeStampedModel):
 
     def __str__(self):
         return f'{self.author_name} ({self.rating}★)'
+
+
+class ContactMessage(TimeStampedModel):
+    """Mensajes del formulario de contacto público (Fase 3.9), enviados sin
+    login desde POST /api/contacto/ — ver views.py/serializers.py. A
+    diferencia de Offering/Testimonial no hereda OrderedActiveModel: no hay
+    "orden de aparición" ni "activo/inactivo" para un mensaje entrante, solo
+    is_read, que Carla tilda desde el Admin para llevar registro de cuáles
+    ya atendió (no oculta ni borra nada). No hereda de OrderedActiveModel,
+    pero sí de TimeStampedModel para created_at/updated_at, igual que el
+    resto de este módulo."""
+    name = models.CharField(max_length=150)
+    email = models.EmailField()
+    message = models.TextField(max_length=3000)
+    is_read = models.BooleanField(
+        default=False,
+        help_text='Carla lo tilda una vez que respondió la consulta.',
+    )
+
+    class Meta:
+        verbose_name = 'Mensaje de contacto'
+        verbose_name_plural = 'Mensajes de contacto'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.name} ({self.created_at:%d/%m/%Y %H:%M})'
