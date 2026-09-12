@@ -42,11 +42,19 @@ class OfferingAdmin(admin.ModelAdmin):
     prepopulated_fields = {'slug': ('name',)}
     readonly_fields = ('created_at', 'updated_at')
     ordering = ('display_order', 'name')
+    # filter_horizontal rather than the default multi-select box: picking
+    # videos into a package is easier as a searchable two-pane widget once
+    # the catalog has more than a handful of videos.
+    filter_horizontal = ('videos',)
 
     fieldsets = (
         (None, {'fields': ('name', 'slug', 'description')}),
         ('Precio', {'fields': ('price', 'currency')}),
         ('Pagos', {'fields': ('payment_url_ars', 'payment_url_usd')}),
+        ('Acceso (Fase 4A)', {
+            'fields': ('videos',),
+            'description': 'Videos que se desbloquean al comprar esta propuesta. Opcional.',
+        }),
         ('Visibilidad', {'fields': ('is_active', 'display_order')}),
         ('Fechas', {'fields': ('created_at', 'updated_at'), 'classes': ('collapse',)}),
     )

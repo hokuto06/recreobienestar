@@ -6,11 +6,19 @@ separate from catalog (Video/Category/Program) and memberships
 - SiteSettings holds copy that appears once, site-wide (hero headline,
   tagline, Carla's bio, contact/social links) — a singleton, not a list.
 - Offering holds Carla's one-time-purchase products (with Mercado Pago
-  links), which are NOT membership subscription tiers and do NOT gate
-  video access — see memberships.services.can_access_video, which this
-  model is never consulted by. Kept distinct from MembershipPlan
-  specifically so "what one-time products exist" and "what recurring plan
-  tier gates this video" never get conflated in the same table.
+  links), which are NOT membership subscription tiers. Kept distinct from
+  MembershipPlan specifically so "what one-time products exist" and "what
+  recurring plan tier gates this video" never get conflated in the same
+  table.
+
+  Phase 4A added Offering.videos (optional M2M to catalog.Video): an
+  offering MAY bundle videos, and a user with a COMPLETED purchase
+  (payments.OfferingPurchase) of it gets access to those videos — see
+  memberships.services.can_access_video, which OR's this in as an
+  ADDITIONAL path alongside membership access (overlap allowed, neither
+  path knows about the other). An offering with no videos (a PDF, a
+  service, ...) simply grants none — that's the blank=True default, not a
+  special case.
 """
 from decimal import Decimal
 
@@ -108,6 +116,16 @@ class Offering(OrderedActiveModel, TimeStampedModel):
     )
     payment_url_usd = models.URLField(
         blank=True, help_text='Link de pago en USD. Opcional.',
+    )
+
+    # Phase 4A: which videos (if any) a COMPLETED purchase of this offering
+    # unlocks — see payments.OfferingPurchase and memberships.services.
+    # can_access_video. blank=True: most offerings today are PDFs/services
+    # with nothing in the video catalog to grant, and that's the normal
+    # case, not a gap to fill in later.
+    videos = models.ManyToManyField(
+        'catalog.Video', related_name='offerings', blank=True,
+        help_text='Videos que se desbloquean al comprar esta propuesta (opcional).',
     )
 
     class Meta(OrderedActiveModel.Meta):

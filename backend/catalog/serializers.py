@@ -72,13 +72,14 @@ class VideoListSerializer(serializers.ModelSerializer):
         # access would hand them the ID just as surely as the detail
         # endpoint's youtube_video_id field would. Same check, same rule.
         #
-        # `subscriptions` (see VideoViewSet.get_serializer_context) is the
-        # caller's subscriptions fetched once for the whole page, not
-        # re-queried for every video in the list.
+        # `subscriptions`/`purchases` (see VideoViewSet.get_serializer_context)
+        # are the caller's subscriptions/offering purchases fetched once for
+        # the whole page, not re-queried for every video in the list.
         request = self.context.get('request')
         user = getattr(request, 'user', None)
         subscriptions = self.context.get('subscriptions')
-        if not can_access_video(user, obj, subscriptions=subscriptions):
+        purchases = self.context.get('purchases')
+        if not can_access_video(user, obj, subscriptions=subscriptions, purchases=purchases):
             return None
         return obj.thumbnail_display_url or None
 
