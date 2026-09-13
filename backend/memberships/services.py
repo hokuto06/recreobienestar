@@ -7,16 +7,19 @@ watch what. Views, templates, and serializers must call can_access_video()
 rather than re-deriving the rules.
 
 Performance note: every function here accepts an optional `subscriptions`
-list. Pass a pre-fetched `list(user.subscriptions.select_related('plan'))`
-when checking access for MANY videos in one request (dashboard, video
-library, API list) — without it, checking N videos means N separate
-queries against the user's subscriptions, one per call. See
-accounts/views.py:dashboard and catalog/public_views.py:video_library for
-the batch-fetch call site; catalog/views.py:VideoViewSet does the same for
-the API. A single video_detail check doesn't need this — one video means
-one query either way.
+list (and, since Phase 4A, an optional `purchases` list — see
+can_access_video below). Pass a pre-fetched
+`list(user.subscriptions.select_related('plan'))` when checking access for
+MANY videos in one request (dashboard, video library, API list) —
+without it, checking N videos means N separate queries against the user's
+subscriptions, one per call. See accounts/views.py:dashboard and
+catalog/public_views.py:video_library for the batch-fetch call site;
+catalog/views.py:VideoViewSet does the same for the API. A single
+video_detail check doesn't need this — one video means one query either
+way.
 """
 from common.choices import VideoAccessLevel
+from payments.models import OfferingPurchase, PurchaseStatus
 
 
 def _active_subscriptions_matching(user, subscriptions, at, predicate):
@@ -54,6 +57,39 @@ def user_has_any_active_paid_plan(user, at=None, subscriptions=None):
     )
 
 
+def user_has_purchased_offering_unlocking(user, video, purchases=None):
+    """Phase 4A: True if `user` has a COMPLETED purchase
+    (payments.OfferingPurchase) of an Offering whose `videos` M2M includes
+    `video`. This is the offering-purchase counterpart to
+    user_has_active_plan/user_has_any_active_paid_plan above — an
+    independent, additional way to reach a video, OR'd in by
+    can_access_video, never a replacement for the membership checks.
+
+    `purchases`: mirrors the `subscriptions` prefetch pattern — pass a
+    pre-fetched
+    `list(OfferingPurchase.objects.filter(user=user)
+        .select_related('offering').prefetch_related('offering__videos'))`
+    when checking many videos in one request, to avoid one query per
+    video. Deliberately NOT pre-filtered to COMPLETED at the call site
+    (same reasoning as `subscriptions` not being pre-filtered to active):
+    filtering happens here, in one place, exactly like
+    Subscription.is_active() is what filters `subscriptions`.
+
+    Accepts no `at` — a completed purchase doesn't expire the way a
+    subscription does; there's nothing time-based to evaluate here.
+    """
+    if user is None or not getattr(user, 'is_authenticated', False):
+        return False
+    if purchases is None:
+        return OfferingPurchase.objects.unlocking(user, video).exists()
+    for purchase in purchases:
+        if purchase.status != PurchaseStatus.COMPLETED:
+            continue
+        if any(v.id == video.id for v in purchase.offering.videos.all()):
+            return True
+    return False
+
+
 def get_current_subscription(user, subscriptions=None):
     """The subscription to treat as "your membership" for display purposes
     (dashboard, profile) — the most recently created one, active or not, so
@@ -72,7 +108,7 @@ def get_current_subscription(user, subscriptions=None):
     return max(candidates, key=lambda s: s.created_at, default=None)
 
 
-def can_access_video(user, video, at=None, subscriptions=None):
+def can_access_video(user, video, at=None, subscriptions=None, purchases=None):
     """The single source of truth for "can this user watch this video right
     now". Mirrors the rules:
       - staff/superusers can access ANY video, published or not — this is
@@ -80,13 +116,26 @@ def can_access_video(user, video, at=None, subscriptions=None):
         without having to grant herself a paid subscription
       - unpublished videos are never accessible to anyone else
       - free videos are accessible to everyone, including anonymous users
-      - plan1/plan2 videos require an active subscription to that exact plan
-      - all_paid videos require an active subscription to any plan
+      - plan1/plan2/plan3 videos require an active subscription to that
+        exact plan, OR (Phase 4A) a completed purchase of an Offering that
+        bundles this video
+      - all_paid videos require an active subscription to any plan, OR
+        (Phase 4A) a completed offering purchase, same as above
       - an expired subscription grants no access, even if its status field
         hasn't caught up yet (see Subscription.is_expired)
 
-    `subscriptions`: see module docstring — pass a pre-fetched list when
-    checking many videos in one request to avoid N+1 queries.
+    Phase 4A note: membership and offering-purchase are two INDEPENDENT,
+    additive access paths — OR'd together, never replacing one another.
+    Overlap is expected and fine: a video may be reachable via both a
+    membership AND a purchased offering at once. Neither path knows about
+    the other; this function is the only place they're combined. The
+    offering-purchase path is deliberately checked LAST and can only ever
+    ADD access for a plan-gated video — it never runs for (and can never
+    override) the staff, unpublished, or FREE branches above, which still
+    return unconditionally exactly as before.
+
+    `subscriptions` / `purchases`: see module docstring — pass pre-fetched
+    lists when checking many videos in one request to avoid N+1 queries.
     """
     if user is not None and getattr(user, 'is_authenticated', False) and (
         user.is_staff or user.is_superuser
@@ -100,7 +149,10 @@ def can_access_video(user, video, at=None, subscriptions=None):
         return True
 
     if video.access_level == VideoAccessLevel.ALL_PAID:
-        return user_has_any_active_paid_plan(user, at=at, subscriptions=subscriptions)
+        if user_has_any_active_paid_plan(user, at=at, subscriptions=subscriptions):
+            return True
+    # video.access_level is a specific plan tier (plan1/plan2/plan3).
+    elif user_has_active_plan(user, video.access_level, at=at, subscriptions=subscriptions):
+        return True
 
-    # video.access_level is a specific plan tier (plan1/plan2).
-    return user_has_active_plan(user, video.access_level, at=at, subscriptions=subscriptions)
+    return user_has_purchased_offering_unlocking(user, video, purchases=purchases)

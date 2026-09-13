@@ -11,6 +11,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from memberships.services import can_access_video
+from payments.models import OfferingPurchase
 
 from .models import Category, Program, Video
 from .services import (
@@ -30,16 +31,31 @@ def _subscriptions_for(user):
     return list(user.subscriptions.select_related('plan'))
 
 
+def _purchases_for(user):
+    """Phase 4A counterpart to _subscriptions_for: one query for the
+    page's worth of offering-purchase access checks, instead of one per
+    video."""
+    if not getattr(user, 'is_authenticated', False):
+        return []
+    return list(
+        OfferingPurchase.objects.filter(user=user)
+        .select_related('offering').prefetch_related('offering__videos')
+    )
+
+
 def _stamp_engagement(user, videos):
     """Stamps .unlocked, .is_favorited, .progress on each video in `videos`
     (a list, so this can iterate it twice) — one query per concern, never
     one per video. Mirrors the existing .unlocked pattern used throughout
     this app (see module docstrings in memberships/services.py)."""
     subscriptions = _subscriptions_for(user)
+    purchases = _purchases_for(user)
     favorited_ids = get_favorited_video_ids(user, videos=videos)
     progress_map = get_progress_map(user, videos=videos)
     for video in videos:
-        video.unlocked = can_access_video(user, video, subscriptions=subscriptions)
+        video.unlocked = can_access_video(
+            user, video, subscriptions=subscriptions, purchases=purchases,
+        )
         video.is_favorited = video.id in favorited_ids
         video.progress = progress_map.get(video.id)
     return videos

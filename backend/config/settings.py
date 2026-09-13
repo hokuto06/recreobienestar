@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'catalog',
     'memberships',
     'site_content',
+    'payments',
 ]
 
 MIDDLEWARE = [

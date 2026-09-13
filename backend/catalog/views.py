@@ -2,6 +2,7 @@ from rest_framework import generics, viewsets
 from rest_framework.response import Response
 
 from memberships.services import can_access_video
+from payments.models import OfferingPurchase
 
 from .filters import VideoFilter
 from .models import Category, Program, Video
@@ -48,20 +49,27 @@ class VideoViewSet(viewsets.ReadOnlyModelViewSet):
         return VideoListSerializer
 
     def get_serializer_context(self):
-        """Adds `subscriptions`: the caller's subscriptions, fetched once
-        per request (not once per video) — VideoListSerializer.get_thumbnail
-        passes this straight through to can_access_video. Without it, a
-        paginated list of 20 videos would run 20 separate subscription
-        queries instead of this single one. Only needed for `list` —
-        `retrieve` handles a single video and already resolved access in
-        retrieve() below before the serializer even runs."""
+        """Adds `subscriptions` and `purchases`: the caller's subscriptions
+        and completed-or-not offering purchases, each fetched once per
+        request (not once per video) — VideoListSerializer.get_thumbnail
+        passes both straight through to can_access_video. Without this, a
+        paginated list of 20 videos would run 20 separate subscription (and
+        20 more purchase) queries instead of these two. Only needed for
+        `list` — `retrieve` handles a single video and already resolved
+        access in retrieve() below before the serializer even runs."""
         context = super().get_serializer_context()
         if self.action == 'list':
             request = context.get('request')
             user = getattr(request, 'user', None) if request else None
+            authenticated = user is not None and user.is_authenticated
             context['subscriptions'] = (
-                list(user.subscriptions.select_related('plan'))
-                if user is not None and user.is_authenticated else []
+                list(user.subscriptions.select_related('plan')) if authenticated else []
+            )
+            context['purchases'] = (
+                list(
+                    OfferingPurchase.objects.filter(user=user)
+                    .select_related('offering').prefetch_related('offering__videos')
+                ) if authenticated else []
             )
         return context
 

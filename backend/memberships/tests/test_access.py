@@ -7,6 +7,8 @@ from django.utils import timezone
 from catalog.models import Category, Video
 from memberships.models import MembershipPlan, Subscription
 from memberships.services import can_access_video
+from payments.models import OfferingPurchase, PurchaseStatus
+from site_content.models import Offering
 
 User = get_user_model()
 
@@ -178,3 +180,127 @@ class SubscriptionModelTests(TestCase):
             ends_at=self.now - timedelta(minutes=1),
         )
         self.assertFalse(sub.is_active())
+
+
+class OfferingPurchaseAccessTests(TestCase):
+    """Phase 4A: can_access_video()'s offering-purchase path — an
+    ADDITIONAL way to reach a video, OR'd alongside membership access (see
+    memberships/services.py). These must never interfere with the
+    membership-only behavior covered by AccessControlTests above; several
+    tests here deliberately re-check that those earlier gates (unpublished,
+    FREE) still win regardless of any purchase."""
+
+    def setUp(self):
+        self.now = timezone.now()
+        self.category = Category.objects.create(name='Pilates')
+        self.user = User.objects.create_user(username='compradora', password='x')
+        self.plan1 = MembershipPlan.objects.create(tier='plan1', name='Plan 1', price=1000)
+
+    def _video(self, **kwargs):
+        defaults = dict(
+            title='Video', youtube_url='https://youtu.be/dQw4w9WgXcQ',
+            category=self.category, is_published=True,
+        )
+        defaults.update(kwargs)
+        return Video.objects.create(**defaults)
+
+    def _offering(self, *videos, **kwargs):
+        defaults = dict(name='Curso', price=5000)
+        defaults.update(kwargs)
+        offering = Offering.objects.create(**defaults)
+        if videos:
+            offering.videos.set(videos)
+        return offering
+
+    def _purchase(self, offering, status=PurchaseStatus.COMPLETED, user=None):
+        return OfferingPurchase.objects.create(
+            user=user or self.user, offering=offering, status=status,
+        )
+
+    # ── a completed purchase grants access ──────────────────────────
+    def test_completed_purchase_grants_access_to_bundled_video(self):
+        video = self._video(access_level='plan1')
+        offering = self._offering(video)
+        self._purchase(offering, status=PurchaseStatus.COMPLETED)
+        self.assertTrue(can_access_video(self.user, video))
+
+    def test_pending_purchase_does_not_grant_access(self):
+        video = self._video(access_level='plan1')
+        offering = self._offering(video)
+        self._purchase(offering, status=PurchaseStatus.PENDING)
+        self.assertFalse(can_access_video(self.user, video))
+
+    def test_failed_purchase_does_not_grant_access(self):
+        video = self._video(access_level='plan1')
+        offering = self._offering(video)
+        self._purchase(offering, status=PurchaseStatus.FAILED)
+        self.assertFalse(can_access_video(self.user, video))
+
+    def test_completed_purchase_of_unrelated_offering_grants_no_access(self):
+        video = self._video(access_level='plan1')
+        other_video = self._video(title='Otro', access_level='plan1')
+        offering = self._offering(other_video)  # bundles a DIFFERENT video
+        self._purchase(offering, status=PurchaseStatus.COMPLETED)
+        self.assertFalse(can_access_video(self.user, video))
+
+    # ── overlap: membership and purchase are independent paths ──────
+    def test_membership_only_grants_access_without_any_purchase(self):
+        video = self._video(access_level='plan1')
+        self._offering(video)  # exists, but never purchased
+        Subscription.objects.create(
+            user=self.user, plan=self.plan1, status='active',
+            ends_at=self.now + timedelta(days=10),
+        )
+        self.assertTrue(can_access_video(self.user, video))
+
+    def test_purchase_only_grants_access_without_any_membership(self):
+        video = self._video(access_level='plan1')
+        offering = self._offering(video)
+        self._purchase(offering, status=PurchaseStatus.COMPLETED)
+        self.assertTrue(can_access_video(self.user, video))
+
+    def test_membership_and_purchase_both_grant_access_independently(self):
+        video = self._video(access_level='plan1')
+        offering = self._offering(video)
+        self._purchase(offering, status=PurchaseStatus.COMPLETED)
+        Subscription.objects.create(
+            user=self.user, plan=self.plan1, status='active',
+            ends_at=self.now + timedelta(days=10),
+        )
+        self.assertTrue(can_access_video(self.user, video))
+
+    # ── the offering path never overrides an earlier gate ───────────
+    def test_offering_path_does_not_bypass_unpublished_gate(self):
+        video = self._video(access_level='plan1', is_published=False)
+        offering = self._offering(video)
+        self._purchase(offering, status=PurchaseStatus.COMPLETED)
+        self.assertFalse(can_access_video(self.user, video))
+
+    def test_offering_path_does_not_affect_free_videos(self):
+        video = self._video(access_level='free')
+        # An unrelated completed purchase exists for this user, but it
+        # doesn't bundle THIS video — free access must not depend on it,
+        # and must still work for anonymous visitors with no purchase at
+        # all.
+        other_video = self._video(title='Otro', access_level='plan1')
+        offering = self._offering(other_video)
+        self._purchase(offering, status=PurchaseStatus.COMPLETED)
+        self.assertTrue(can_access_video(self.user, video))
+        self.assertTrue(can_access_video(None, video))
+
+    # ── anonymous ────────────────────────────────────────────────────
+    def test_anonymous_user_with_no_purchase_denied(self):
+        video = self._video(access_level='plan1')
+        self._offering(video)  # exists, but never purchased by anyone
+        self.assertFalse(can_access_video(None, video))
+
+    # ── prefetched `purchases` list matches the default live-query path ──
+    def test_purchases_prefetch_list_grants_access_same_as_live_query(self):
+        video = self._video(access_level='plan1')
+        offering = self._offering(video)
+        self._purchase(offering, status=PurchaseStatus.COMPLETED)
+        purchases = list(
+            OfferingPurchase.objects.filter(user=self.user)
+            .select_related('offering').prefetch_related('offering__videos')
+        )
+        self.assertTrue(can_access_video(self.user, video, purchases=purchases))

@@ -21,6 +21,7 @@ from catalog.services import get_continue_watching, get_favorited_video_ids, get
 from common.choices import VideoAccessLevel
 from memberships.models import Subscription
 from memberships.services import can_access_video, get_current_subscription
+from payments.models import OfferingPurchase
 
 from .forms import EmailOrUsernameAuthenticationForm, ProfileForm, RegistrationForm
 from .models import Profile
@@ -155,8 +156,14 @@ class FavoritesListView(LoginRequiredMixin, ListView):
         context = super().get_context_data(**kwargs)
         videos = [f.video for f in context['favorites']]
         subscriptions = list(self.request.user.subscriptions.select_related('plan'))
+        purchases = list(
+            OfferingPurchase.objects.filter(user=self.request.user)
+            .select_related('offering').prefetch_related('offering__videos')
+        )
         for video in videos:
-            video.unlocked = can_access_video(self.request.user, video, subscriptions=subscriptions)
+            video.unlocked = can_access_video(
+                self.request.user, video, subscriptions=subscriptions, purchases=purchases,
+            )
             video.is_favorited = True
         return context
 
@@ -172,8 +179,13 @@ def dashboard(request):
     # Fetched once and reused for both the "current plan" display and every
     # can_access_video() check below — without passing this list through,
     # each video would re-query the user's subscriptions from scratch
-    # (an N+1: one query per video instead of this single one).
+    # (an N+1: one query per video instead of this single one). Same
+    # rationale for all_purchases (Phase 4A's offering-purchase path).
     all_subscriptions = list(Subscription.objects.filter(user=user).select_related('plan'))
+    all_purchases = list(
+        OfferingPurchase.objects.filter(user=user)
+        .select_related('offering').prefetch_related('offering__videos')
+    )
     current_subscription = get_current_subscription(user, subscriptions=all_subscriptions)
     membership_is_active = current_subscription.is_active() if current_subscription else False
 
@@ -190,7 +202,9 @@ def dashboard(request):
     # language can't express `video in available_videos` in a {% with %},
     # and re-checking per-template would risk drifting from this decision).
     for video in published_videos:
-        video.unlocked = can_access_video(user, video, subscriptions=all_subscriptions)
+        video.unlocked = can_access_video(
+            user, video, subscriptions=all_subscriptions, purchases=all_purchases,
+        )
         video.is_favorited = video.id in favorited_ids
         video.progress = progress_map.get(video.id)
     available_videos = [v for v in published_videos if v.unlocked]
@@ -203,7 +217,9 @@ def dashboard(request):
     # everywhere else, not just skip straight to "still available".
     continue_watching = get_continue_watching(user, limit=6)
     for progress in continue_watching:
-        progress.video.unlocked = can_access_video(user, progress.video, subscriptions=all_subscriptions)
+        progress.video.unlocked = can_access_video(
+            user, progress.video, subscriptions=all_subscriptions, purchases=all_purchases,
+        )
         progress.video.is_favorited = progress.video.id in favorited_ids
         progress.video.progress = progress
 
