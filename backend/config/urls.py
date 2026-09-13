@@ -22,6 +22,10 @@ urlpatterns = [
     # by nginx and never routed to this container.
     path('', include('accounts.urls')),
     path('', include('catalog.urls')),
+    # /pago/exito|pendiente|error/ — Mercado Pago's checkout back_urls
+    # (see payments/views.py:CheckoutInitiationView). Placeholder pages
+    # for Phase 4B-1; real templates land in 4B-3.
+    path('', include('payments.urls')),
 ]
 
 def serve_media(request, path):

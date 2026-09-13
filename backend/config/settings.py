@@ -208,21 +208,36 @@ AXES_COOLOFF_MESSAGE = (
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 DEFAULT_FROM_EMAIL = 'Recreo Bienestar <no-reply@recreobienestar.com>'
 
+# ── Mercado Pago (Phase 4B-1: checkout initiation, sandbox) ───────────────
+# Same env('...') pattern as SECRET_KEY/DB_PASSWORD above — no default, so
+# a missing value raises ImproperlyConfigured at process startup rather
+# than the app booting and failing per-request later. Never hardcode a
+# fallback here. Access token is used server-side only (creating
+# preferences — see payments/views.py); the public key is for a future
+# frontend Checkout Bricks integration, not used by any Python code yet.
+MERCADOPAGO_ACCESS_TOKEN = env('MERCADOPAGO_ACCESS_TOKEN')
+MERCADOPAGO_PUBLIC_KEY = env('MERCADOPAGO_PUBLIC_KEY')
+
 # ── REST API ─────────────────────────────────────────────────────────────
-# Read-only, public, same-origin (served under /api/ on the same domain as
-# the static site — no separate frontend origin exists yet, so no CORS
-# package is installed; adding one later should default to an explicit
-# allow-list, never a wildcard).
+# Same-origin (served under /api/ on the same domain as the static site —
+# no separate frontend origin exists yet, so no CORS package is installed;
+# adding one later should default to an explicit allow-list, never a
+# wildcard).
 #
-# AllowAny is still correct: nothing under /api/ requires being logged in
-# to use. But — unlike when this comment first said "there is no gated
-# content this API can accidentally leak" (true in Phase 2, before
-# per-video membership access levels existed as a public concept) —
+# AllowAny is the correct DEFAULT: most of /api/ is read-only and public.
+# But — unlike when this comment first said "there is no gated content
+# this API can accidentally leak" (true in Phase 2, before per-video
+# membership access levels existed as a public concept) —
 # catalog.views.VideoViewSet now DOES check can_access_video() per request,
 # which needs to know the real caller, not always AnonymousUser. Session
 # authentication (safe for GET; DRF only enforces its CSRF check on unsafe
-# methods, and there are none here) is what lets that resolve correctly
-# for a logged-in same-origin browser session.
+# methods) is what lets that resolve correctly for a logged-in same-origin
+# browser session. Phase 4B-1 adds the one deliberate exception to
+# AllowAny: payments.views.CheckoutInitiationView overrides
+# permission_classes to IsAuthenticated — a purchase must be attributed to
+# a real user — while still keeping SessionAuthentication (and therefore
+# its CSRF check) enabled, unlike site_content.views.
+# ContactMessageCreateView's anonymous design.
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,

@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from catalog.views import CategoryListView, ProgramListView, VideoViewSet
 from memberships.views import MembershipPlanListView
+from payments.views import CheckoutInitiationView
 from site_content.views import (
     ContactMessageCreateView, OfferingListView, SiteSettingsView, TestimonialListView,
 )
@@ -17,8 +18,13 @@ urlpatterns = [
     path('offerings/', OfferingListView.as_view(), name='offering-list'),
     path('testimonials/', TestimonialListView.as_view(), name='testimonial-list'),
     path('site-settings/', SiteSettingsView.as_view(), name='site-settings'),
-    # Only write endpoint under /api/ — see ContactMessageCreateView for
-    # why it's safe without session auth/CSRF.
+    # The only two non-read-only endpoints under /api/, and deliberate
+    # opposites of each other: contacto is anonymous (see
+    # ContactMessageCreateView's docstring for why that's safe without
+    # session auth/CSRF); checkout is authenticated-only (see
+    # CheckoutInitiationView's docstring) and keeps SessionAuthentication —
+    # and therefore CSRF — fully enabled.
     path('contacto/', ContactMessageCreateView.as_view(), name='contact-message-create'),
+    path('checkout/', CheckoutInitiationView.as_view(), name='checkout-initiate'),
     path('', include(router.urls)),
 ]
