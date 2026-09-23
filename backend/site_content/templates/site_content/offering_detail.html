@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ offering.name }} | Recreo Bienestar{% endblock %}
+{% block content %}
+<section class="container member-hero">
+  <p><a href="/#programas-cursos">← Volver a Propuestas</a></p>
+  <span class="eyebrow">Propuesta</span>
+  <h1>{{ offering.name }}</h1>
+  {% if offering.description %}
+    <p class="lede" style="margin-top:0.5rem;max-width:60ch">{{ offering.description|linebreaksbr }}</p>
+  {% endif %}
+  <p style="margin-top:var(--space-3);font-size:1.5rem;font-weight:600">
+    ${{ offering.price|floatformat:0 }} {{ offering.currency }}
+  </p>
+</section>
+
+<section class="container section--tight" style="max-width:32ch">
+  {% comment %}
+  data-checkout-error: hidden by default, shown by site.js on a failed
+  /api/checkout/ call (network error, 4xx/5xx) — never a silent failure.
+  {% endcomment %}
+  <div class="alert alert-error" data-checkout-error hidden></div>
+  {% comment %}
+  No real no-JS fallback here (unlike the Favoritos form in
+  video_detail.html): /api/checkout/ answers with JSON (an init_point to
+  redirect to), not an HTTP redirect, so a plain form submit with JS
+  disabled would only ever show raw JSON to the buyer — worse than
+  nothing. This page (like the rest of the dynamic home content) already
+  assumes JS; site.js's checkout block is what actually wires this form's
+  submit to the real flow.
+  {% endcomment %}
+  <form data-checkout-form data-offering-slug="{{ offering.slug }}">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-primary btn-block" data-checkout-submit>Comprar</button>
+  </form>
+</section>
+{% endblock %}

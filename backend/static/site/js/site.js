@@ -105,4 +105,55 @@
         });
     });
   });
+
+  /* ---------- Comprar una Propuesta (Fase 4B-3) ----------
+     Same CSRF-via-meta-tag pattern as Favoritos above — never the cookie
+     (CSRF_COOKIE_HTTPONLY stays True either way). Unlike Favoritos, there
+     is no sensible plain-<form> fallback here: /api/checkout/ answers
+     with JSON (an init_point to redirect to), not an HTTP redirect, so a
+     no-JS submit would only ever show raw JSON to the buyer. Instead, any
+     failure (network error, 4xx/5xx, or a malformed response) shows a
+     clear message in [data-checkout-error] — never a silent failure —
+     and re-enables the button so the buyer can try again. */
+  document.querySelectorAll('[data-checkout-form]').forEach(function (form) {
+    form.addEventListener('submit', function (evt) {
+      evt.preventDefault();
+      var button = form.querySelector('[data-checkout-submit]');
+      var errorBox = document.querySelector('[data-checkout-error]');
+      var slug = form.getAttribute('data-offering-slug');
+      if (!csrfToken || !button || !slug || button.disabled) { return; }
+      if (errorBox) { errorBox.hidden = true; }
+      button.disabled = true;
+      var originalLabel = button.textContent;
+      button.textContent = 'Redirigiendo a Mercado Pago…';
+
+      fetch('/api/checkout/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken,
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ offering: slug }),
+      })
+        .then(function (resp) {
+          return resp.json().catch(function () { return {}; }).then(function (data) {
+            if (!resp.ok || !data.init_point) {
+              throw new Error(data.detail || 'No se pudo iniciar el pago. Intentá de nuevo en unos minutos.');
+            }
+            // Full-page redirect to Mercado Pago's Checkout Pro — not a
+            // fetch/XHR target, so this is the correct way to get there.
+            window.location.href = data.init_point;
+          });
+        })
+        .catch(function (err) {
+          button.disabled = false;
+          button.textContent = originalLabel;
+          if (errorBox) {
+            errorBox.textContent = (err && err.message) || 'No se pudo iniciar el pago. Intentá de nuevo en unos minutos.';
+            errorBox.hidden = false;
+          }
+        });
+    });
+  });
 })();

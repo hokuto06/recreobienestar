@@ -305,9 +305,15 @@
   }
 
   /* ---------- Programas y Cursos (Offering: productos de pago único) ----------
-     Sin link de pago cargado todavía (Fase 4 los conecta): el botón se
-     muestra igual, marcado como no disponible en vez de desaparecer —
-     nunca se oculta el producto entero por falta de link de pago. */
+     Fase 4B-3: el botón lleva a /propuestas/<slug>/, una página
+     server-rendered en Django (site_content/public_views.py) que inicia
+     el checkout real de Mercado Pago — ver payments/views.py:
+     CheckoutInitiationView. Reemplaza los links externos
+     payment_url_ars/payment_url_usd usados antes de esa integración; esos
+     campos siguen existiendo en el modelo/admin como referencia, pero ya
+     no se leen acá. /api/offerings/ ya filtra is_active=True y `price` es
+     un campo obligatorio del modelo, así que todo lo que llega a esta
+     lista es comprable — el estado "Próximamente" ya no aplica. */
   var OFFERING_ACCENTS = ['', 'offering-card--pool', 'offering-card--earth'];
   var offeringsMount = document.querySelector('[data-offerings-mount]');
   if (offeringsMount) {
@@ -323,16 +329,6 @@
         var priceLabel = isNaN(priceNumber)
           ? esc(offering.price)
           : priceNumber.toLocaleString('es-AR', { maximumFractionDigits: 0 });
-        var buttons = '';
-        if (offering.payment_url_ars) {
-          buttons += '<a class="is-primary" href="' + esc(offering.payment_url_ars) + '" target="_blank" rel="noopener">Pagar en ARS</a>';
-        }
-        if (offering.payment_url_usd) {
-          buttons += '<a class="is-outline" href="' + esc(offering.payment_url_usd) + '" target="_blank" rel="noopener">Pagar en USD</a>';
-        }
-        if (!buttons) {
-          buttons = '<span class="is-disabled">Próximamente</span>';
-        }
         return (
           '<div class="offering-card' + (accent ? ' ' + accent : '') + '">' +
             '<div>' +
@@ -340,7 +336,9 @@
               (offering.description ? '<p class="lede">' + esc(offering.description) + '</p>' : '') +
               '<p class="offering-price">$' + priceLabel + ' ' + esc(offering.currency) + '</p>' +
             '</div>' +
-            '<div class="offering-actions">' + buttons + '</div>' +
+            '<div class="offering-actions">' +
+              '<a class="is-primary" href="/propuestas/' + esc(offering.slug) + '/">Comprar</a>' +
+            '</div>' +
           '</div>'
         );
       }).join('');
