@@ -217,6 +217,13 @@ DEFAULT_FROM_EMAIL = 'Recreo Bienestar <no-reply@recreobienestar.com>'
 # frontend Checkout Bricks integration, not used by any Python code yet.
 MERCADOPAGO_ACCESS_TOKEN = env('MERCADOPAGO_ACCESS_TOKEN')
 MERCADOPAGO_PUBLIC_KEY = env('MERCADOPAGO_PUBLIC_KEY')
+# Phase 4B-2: the secret signature used to verify MP's webhook
+# notifications (x-signature header) — see payments/views.py's
+# MercadoPagoWebhookView. Same no-default env('...') pattern as the two
+# above: this endpoint is publicly reachable, so a missing secret must
+# fail loudly at startup, never silently accept unverified notifications.
+# Never logged, never hardcoded, no fallback default.
+MERCADOPAGO_WEBHOOK_SECRET = env('MERCADOPAGO_WEBHOOK_SECRET')
 
 # ── REST API ─────────────────────────────────────────────────────────────
 # Same-origin (served under /api/ on the same domain as the static site —
