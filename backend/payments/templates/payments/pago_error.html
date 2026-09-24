@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}El pago no se pudo procesar | Recreo Bienestar{% endblock %}
+{% block content %}
+<section class="container member-hero">
+  <span class="eyebrow">Pago no procesado</span>
+  <h1>No pudimos procesar tu pago</h1>
+  <p class="lede" style="margin-top:0.5rem;max-width:60ch">
+    {% if purchase %}El pago de <strong>{{ purchase.offering.name }}</strong> no fue aprobado.{% else %}El pago no fue aprobado.{% endif %}
+    Podés intentarlo de nuevo cuando quieras.
+  </p>
+</section>
+
+<section class="container section--tight">
+  {% if purchase %}
+    <a class="btn btn-primary" href="{% url 'site_content:offering_detail' purchase.offering.slug %}">Intentar de nuevo</a>
+  {% else %}
+    <a class="btn btn-primary" href="/#programas-cursos">Volver a Propuestas</a>
+  {% endif %}
+</section>
+{% endblock %}

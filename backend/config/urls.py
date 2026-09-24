@@ -22,6 +22,15 @@ urlpatterns = [
     # by nginx and never routed to this container.
     path('', include('accounts.urls')),
     path('', include('catalog.urls')),
+    # /pago/exito|pendiente|error/ — Mercado Pago's checkout back_urls
+    # (see payments/views.py:CheckoutInitiationView). Placeholder pages
+    # for Phase 4B-1; real templates land in a later phase.
+    path('', include('payments.urls')),
+    # /propuestas/<slug>/ — an Offering's own page (Phase 4B-3); see
+    # site_content/public_views.py:offering_detail. The static home's
+    # offering cards (js/home-dynamic.js) link here instead of the old
+    # external payment_url_ars/payment_url_usd links.
+    path('', include('site_content.urls')),
 ]
 
 def serve_media(request, path):
