@@ -1,17 +1,19 @@
 """
 Phase 4B-1 added checkout INITIATION (CheckoutInitiationView). Phase 4B-2
-adds the WEBHOOK receiver (MercadoPagoWebhookView) — the only view in this
-module that actually completes a purchase and, by extension, unlocks paid
-video access. See MercadoPagoWebhookView's docstring for its security
-model; it is deliberately much more defensive than the rest of this file.
+added the WEBHOOK receiver (MercadoPagoWebhookView). Phase 4B-4 adds the
+return-URL verification views (pago_exito/pago_pendiente/pago_error) as a
+COMPLEMENT to the webhook, not a replacement — both paths end up calling
+the exact same purchase-completion logic (payments.services.
+apply_payment_to_purchase), never a second copy of it. See
+MercadoPagoWebhookView's docstring for the security model both paths
+share; it is deliberately much more defensive than the rest of this file.
 """
 import logging
-from decimal import Decimal, InvalidOperation
 
 import mercadopago
 from django.conf import settings
-from django.db import transaction
-from django.http import HttpResponse
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render
 from django.views.decorators.http import require_GET
 from mercadopago.webhook import InvalidWebhookSignatureError, WebhookSignatureValidator
 from rest_framework import status
@@ -21,6 +23,7 @@ from rest_framework.views import APIView
 
 from site_content.models import Offering
 
+from . import services
 from .models import OfferingPurchase, PurchaseStatus
 
 logger = logging.getLogger(__name__)
@@ -82,9 +85,10 @@ class CheckoutInitiationView(APIView):
                 'unit_price': float(offering.price),
                 'currency_id': offering.currency,
             }],
-            # Placeholder routes (payments/urls.py) — 4B-3 builds the real
-            # success/pending/failure pages; these just need to resolve to
-            # SOMETHING today so Mercado Pago has valid URLs to redirect to.
+            # Real, verified return pages (payments/urls.py -> pago_exito/
+            # pago_pendiente/pago_error, Phase 4B-4) — see those views for
+            # the re-query-MP verification that runs when the buyer lands
+            # on one of these.
             'back_urls': {
                 'success': f'{base_url}/pago/exito/',
                 'pending': f'{base_url}/pago/pendiente/',
@@ -141,42 +145,23 @@ def _extract_data_id(request):
     return str(data_id) if data_id else None
 
 
-def _amount_mismatches(purchase, payment):
-    """True if what Mercado Pago says was actually paid doesn't match the
-    price snapshot taken at checkout time (payments.views.
-    CheckoutInitiationView). Defense in depth against a tampered/replayed
-    notification trying to unlock a purchase for less than it costs.
+def _fetch_mp_payment(payment_id):
+    """Re-queries Mercado Pago's Payments API for `payment_id` and
+    returns the raw, authoritative payment dict — the ONLY source of
+    truth either caller below ever acts on (never the webhook's request
+    body, never the return-URL's query string). Shared by
+    MercadoPagoWebhookView and the /pago/* return views below, both of
+    which then hand the result to payments.services.
+    apply_payment_to_purchase().
 
-    Any comparison failure (missing/malformed transaction_amount, no price
-    snapshot to compare against — the latter can't happen for a 4B-1+
-    purchase, only theoretically for a pre-4B-1 hand-created one) is
-    treated as a mismatch: fail closed, never fail open."""
-    if purchase.amount is None:
-        return True
-    try:
-        reported_amount = Decimal(str(payment.get('transaction_amount'))).quantize(Decimal('0.01'))
-    except (TypeError, InvalidOperation):
-        return True
-    reported_currency = (payment.get('currency_id') or '').upper()
-    expected_currency = (purchase.currency or '').upper()
-    return reported_amount != purchase.amount or reported_currency != expected_currency
-
-
-def _map_purchase_status(mp_status):
-    """Mercado Pago's payment.status vocabulary -> this app's
-    PurchaseStatus. Returns None for a recognized-but-not-actionable MP
-    status (e.g. authorized, in_mediation, charged_back) — the caller
-    still records mp_status/mp_payment_id but leaves `status` untouched
-    rather than guessing at a mapping the product hasn't decided on."""
-    if mp_status == 'approved':
-        return PurchaseStatus.COMPLETED
-    if mp_status in ('rejected', 'cancelled'):
-        return PurchaseStatus.FAILED
-    if mp_status in ('pending', 'in_process'):
-        return PurchaseStatus.PENDING
-    if mp_status == 'refunded':
-        return PurchaseStatus.REFUNDED
-    return None
+    Raises whatever the SDK raises on failure (network error, a non-2xx
+    status via raise_for_status(), including MPNotFoundError for an
+    unknown/fake payment id such as the one Mercado Pago's own webhook
+    "simulate" button sends) — callers decide how to react."""
+    sdk = mercadopago.SDK(settings.MERCADOPAGO_ACCESS_TOKEN)
+    result = sdk.payment().get(payment_id)
+    result.raise_for_status()
+    return result['response']
 
 
 class MercadoPagoWebhookView(APIView):
@@ -278,95 +263,142 @@ class MercadoPagoWebhookView(APIView):
             return Response(status=status.HTTP_200_OK)
 
         try:
-            sdk = mercadopago.SDK(settings.MERCADOPAGO_ACCESS_TOKEN)
-            result = sdk.payment().get(data_id)
-            result.raise_for_status()
+            payment = _fetch_mp_payment(data_id)
         except Exception:
             logger.exception('Mercado Pago webhook: payment lookup failed for data.id=%s', data_id)
             return Response(status=status.HTTP_502_BAD_GATEWAY)
 
-        payment = result['response']
-        mp_payment_id = str(payment.get('id') or data_id)
-        mp_status = payment.get('status', '')
-        external_reference = payment.get('external_reference')
-
-        try:
-            purchase_id = int(external_reference)
-        except (TypeError, ValueError):
-            logger.warning(
-                'Mercado Pago webhook: payment %s has missing/invalid external_reference=%r — '
-                'ignoring, no purchase created or changed',
-                mp_payment_id, external_reference,
-            )
-            return Response(status=status.HTTP_200_OK)
-
-        with transaction.atomic():
-            purchase = OfferingPurchase.objects.select_for_update().filter(pk=purchase_id).first()
-            if purchase is None:
-                logger.warning(
-                    'Mercado Pago webhook: payment %s references unknown OfferingPurchase %s',
-                    mp_payment_id, purchase_id,
-                )
-                return Response(status=status.HTTP_200_OK)
-
-            if purchase.status == PurchaseStatus.COMPLETED:
-                # Idempotent no-op — a retried, duplicate, or stale/
-                # out-of-order notification for a purchase that already
-                # unlocked access. Never re-process, never downgrade.
-                logger.info(
-                    'Mercado Pago webhook: purchase %s already COMPLETED — ignoring payment %s (%s)',
-                    purchase.id, mp_payment_id, mp_status,
-                )
-                return Response(status=status.HTTP_200_OK)
-
-            purchase.mp_payment_id = mp_payment_id
-            purchase.mp_status = mp_status
-
-            if _amount_mismatches(purchase, payment):
-                # Defense in depth (step e): a signature-valid, MP-confirmed
-                # payment that nonetheless doesn't match what was quoted at
-                # checkout. Never mark COMPLETED off this; leave PENDING
-                # (mp_status is saved, so Carla can see what MP actually
-                # reported) so it surfaces for manual review in the admin.
-                logger.error(
-                    'Mercado Pago webhook: AMOUNT/CURRENCY MISMATCH on purchase %s — expected '
-                    '%s %s, MP reported %s %s (payment %s, mp_status=%s) — left PENDING for '
-                    'manual review',
-                    purchase.id, purchase.amount, purchase.currency,
-                    payment.get('transaction_amount'), payment.get('currency_id'),
-                    mp_payment_id, mp_status,
-                )
-                purchase.status = PurchaseStatus.PENDING
-                purchase.save(update_fields=['mp_payment_id', 'mp_status', 'status', 'updated_at'])
-                return Response(status=status.HTTP_200_OK)
-
-            new_status = _map_purchase_status(mp_status)
-            if new_status is not None:
-                purchase.status = new_status
-            purchase.save(update_fields=['mp_payment_id', 'mp_status', 'status', 'updated_at'])
-
-        logger.info(
-            'Mercado Pago webhook: purchase %s -> status=%s (mp_status=%s, payment=%s)',
-            purchase.id, purchase.status, mp_status, mp_payment_id,
-        )
+        # Every decision from here on — mapping to a purchase, amount
+        # check, status mapping, idempotent completion — lives in
+        # payments.services.apply_payment_to_purchase, shared with the
+        # /pago/* return views below. Its return value isn't branched on
+        # here: this view's response contract is unconditionally 200 for
+        # any signature-valid notification whose payment lookup
+        # succeeded, exactly as before this function existed — MP stops
+        # retrying on 2xx, and none of apply_payment_to_purchase's
+        # possible outcomes (unknown purchase, invalid external_reference,
+        # already-completed, amount mismatch, or a normal completion)
+        # benefit from a retry.
+        services.apply_payment_to_purchase(payment, fallback_payment_id=data_id)
         return Response(status=status.HTTP_200_OK)
 
 
-# ── Placeholder return pages (4B-3 replaces these with real templates) ──
-# Mercado Pago needs SOME resolvable back_urls at preference-creation time;
-# these exist purely so those URLs 200 instead of 404 while sandbox-testing
-# the checkout flow end-to-end. No purchase-status lookup, no template,
-# no styling — genuinely just a placeholder.
+def _extract_return_payment_id(request):
+    """The payment id from Mercado Pago's return-URL query string
+    (?payment_id=...). MP has been observed sending the literal string
+    "null" here (e.g. a checkout abandoned before any real payment
+    existed) — treated the same as the param being absent entirely,
+    never looked up."""
+    payment_id = request.GET.get('payment_id')
+    if not payment_id or payment_id.strip().lower() == 'null':
+        return None
+    return payment_id
+
+
+def _handle_payment_return(request):
+    """Shared verification for all three /pago/* return views below.
+    Mercado Pago's back_urls (success/pending/failure) only reflect what
+    MP believed the outcome was AT REDIRECT TIME — exactly like the
+    webhook, this NEVER trusts that, or any other query-string param
+    (status, collection_status, etc.). Only `payment_id` is read from the
+    URL, purely as a lookup key; every actual decision comes from
+    re-querying Mercado Pago (_fetch_mp_payment) and
+    payments.services.apply_payment_to_purchase — the same function the
+    webhook (4B-2) uses, so a purchase completes identically regardless
+    of whether the webhook or this return visit gets there first (or
+    both — idempotent either way).
+
+    Returns (purchase_or_None, outcome) where outcome is one of:
+      'completed' — purchase.status is now COMPLETED (or already was).
+      'pending'   — still PENDING (includes the amount-mismatch case,
+                    which deliberately stays PENDING for manual review)
+                    or REFUNDED/an unmapped MP status.
+      'failed'    — purchase.status is FAILED.
+      'unconfirmed' — nothing could be verified (missing/garbage
+                    payment_id, MP lookup failed e.g. a fake/test id,
+                    unknown or invalid external_reference, or the
+                    purchase belongs to a different user) — `purchase`
+                    is always None here, and NOTHING was changed.
+
+    The template shown is always based on the ACTUAL post-verification
+    outcome, never on which of the three URLs the browser happened to
+    land on — MP's own redirect choice is just a hint, not trusted.
+    """
+    payment_id = _extract_return_payment_id(request)
+    if payment_id is None:
+        return None, 'unconfirmed'
+
+    try:
+        payment = _fetch_mp_payment(payment_id)
+    except Exception:
+        # Covers a fake/test payment id (MPNotFoundError — same case MP's
+        # own webhook "simulate" button triggers) and any transient
+        # lookup failure alike: either way, nothing to show yet, nothing
+        # to change, and no 500 — the buyer can simply retry the page
+        # later, or the webhook may resolve it independently.
+        logger.info('Mercado Pago return: payment lookup failed for payment_id=%s', payment_id)
+        return None, 'unconfirmed'
+
+    outcome = services.apply_payment_to_purchase(
+        payment, fallback_payment_id=payment_id, expected_user=request.user,
+    )
+
+    if outcome.purchase is None:
+        # reason is 'wrong_user', 'invalid_external_reference', or
+        # 'unknown_purchase' — all deliberately collapsed into the same
+        # neutral outcome here, so a wrong-user attempt is never
+        # distinguishable from an honestly-garbled URL.
+        return None, 'unconfirmed'
+
+    purchase = outcome.purchase
+    if purchase.status == PurchaseStatus.COMPLETED:
+        return purchase, 'completed'
+    if purchase.status == PurchaseStatus.FAILED:
+        return purchase, 'failed'
+    return purchase, 'pending'
+
+
+def _render_payment_return(request, purchase, outcome):
+    if outcome == 'completed':
+        return render(request, 'payments/pago_exito.html', {'purchase': purchase})
+    if outcome == 'pending':
+        return render(request, 'payments/pago_pendiente.html', {'purchase': purchase})
+    if outcome == 'failed':
+        return render(request, 'payments/pago_error.html', {'purchase': purchase})
+    return render(request, 'payments/pago_no_confirmado.html')
+
+
+# ── Return pages (Phase 4B-4) ──────────────────────────────────────────
+# Mercado Pago's Checkout Pro redirects the buyer's browser back to one of
+# these three back_urls (set at preference-creation time — see
+# CheckoutInitiationView) after they finish paying. This is a COMPLEMENT
+# to the webhook (4B-2), not a replacement: in this project's sandbox,
+# webhook notifications have been observed not arriving reliably (see the
+# 4B-4 diagnosis), so a purchase that would otherwise stay stuck PENDING
+# forever now also gets a chance to settle the moment the buyer comes
+# back — via the exact same trust model (re-query MP, never trust the
+# URL) and the exact same completion logic (payments.services.
+# apply_payment_to_purchase) as the webhook. Login-required so
+# request.user exists for the ownership check in _handle_payment_return —
+# an anonymous visitor is sent to /ingresar/?next=... exactly like the
+# offering-detail page (site_content.public_views.offering_detail), never
+# a raw 403.
+@login_required
 @require_GET
 def pago_exito(request):
-    return HttpResponse('Pago aprobado. Esta página se completará en la Fase 4B-3.')
+    purchase, outcome = _handle_payment_return(request)
+    return _render_payment_return(request, purchase, outcome)
 
 
+@login_required
 @require_GET
 def pago_pendiente(request):
-    return HttpResponse('Pago pendiente. Esta página se completará en la Fase 4B-3.')
+    purchase, outcome = _handle_payment_return(request)
+    return _render_payment_return(request, purchase, outcome)
 
 
+@login_required
 @require_GET
 def pago_error(request):
-    return HttpResponse('El pago no se pudo procesar. Esta página se completará en la Fase 4B-3.')
+    purchase, outcome = _handle_payment_return(request)
+    return _render_payment_return(request, purchase, outcome)

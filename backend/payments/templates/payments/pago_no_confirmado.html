@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Confirmando tu pago | Recreo Bienestar{% endblock %}
+{% block content %}
+<section class="container member-hero">
+  <span class="eyebrow">Confirmando</span>
+  <h1>Todavía no pudimos confirmar tu pago</h1>
+  <p class="lede" style="margin-top:0.5rem;max-width:60ch">
+    Puede que Mercado Pago todavía esté procesando la confirmación. Revisá "Mi cuenta" en unos
+    minutos — si ya pagaste, el acceso se habilita automáticamente apenas se confirme.
+  </p>
+</section>
+
+<section class="container section--tight">
+  <a class="btn btn-primary" href="{% url 'accounts:dashboard' %}">Ir a mi cuenta</a>
+</section>
+{% endblock %}

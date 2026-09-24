@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}¡Pago aprobado! | Recreo Bienestar{% endblock %}
+{% block content %}
+<section class="container member-hero">
+  <span class="eyebrow">Pago aprobado</span>
+  <h1>¡Gracias por tu compra!</h1>
+  <p class="lede" style="margin-top:0.5rem;max-width:60ch">
+    {% if purchase %}Tu pago de <strong>{{ purchase.offering.name }}</strong> fue aprobado.{% else %}Tu pago fue aprobado.{% endif %}
+    Ya tenés acceso al contenido.
+  </p>
+</section>
+
+<section class="container section--tight">
+  {% if purchase and purchase.offering.videos.exists %}
+    <p style="margin-bottom:var(--space-3);color:var(--color-text-muted)">Ya podés ver:</p>
+    <ul style="margin-bottom:var(--space-4)">
+      {% for video in purchase.offering.videos.all %}
+        <li><a href="{% url 'catalog:video_detail' video.slug %}">{{ video.title }}</a></li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+  <a class="btn btn-primary" href="{% url 'catalog:video_library' %}">Ir a la videoteca</a>
+</section>
+{% endblock %}

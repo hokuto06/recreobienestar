@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Pago en proceso | Recreo Bienestar{% endblock %}
+{% block content %}
+<section class="container member-hero">
+  <span class="eyebrow">Pago en proceso</span>
+  <h1>Tu pago está siendo procesado</h1>
+  <p class="lede" style="margin-top:0.5rem;max-width:60ch">
+    Mercado Pago todavía está confirmando{% if purchase %} el pago de <strong>{{ purchase.offering.name }}</strong>{% else %} tu pago{% endif %}.
+    Esto puede tardar unos minutos — no hace falta que vuelvas a pagar. En cuanto se confirme, el acceso se habilita automáticamente.
+  </p>
+</section>
+
+<section class="container section--tight">
+  <a class="btn btn-primary" href="{% url 'accounts:dashboard' %}">Ir a mi cuenta</a>
+</section>
+{% endblock %}
