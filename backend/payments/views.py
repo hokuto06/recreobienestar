@@ -88,12 +88,26 @@ class CheckoutInitiationView(APIView):
             # Real, verified return pages (payments/urls.py -> pago_exito/
             # pago_pendiente/pago_error, Phase 4B-4) — see those views for
             # the re-query-MP verification that runs when the buyer lands
-            # on one of these.
+            # on one of these. `base_url` is always a fully-qualified
+            # origin (never a bare path), and in production it's always
+            # https: SECURE_SSL_REDIRECT forces every request to https
+            # before this view ever runs, and nginx's `/api/` location
+            # sets X-Forwarded-Proto (read via SECURE_PROXY_SSL_HEADER),
+            # so request.scheme is 'https' here — required by MP for
+            # auto_return below, which silently refuses to fire off an
+            # http (or relative) success URL.
             'back_urls': {
                 'success': f'{base_url}/pago/exito/',
                 'pending': f'{base_url}/pago/pendiente/',
                 'failure': f'{base_url}/pago/error/',
             },
+            # Auto-redirects the buyer's browser to back_urls.success the
+            # instant Mercado Pago approves the payment, instead of
+            # leaving them on MP's own "volver al sitio" confirmation
+            # screen until they click it themselves — without this, the
+            # 4B-4 return-page verification only ever runs if the buyer
+            # remembers to click back manually.
+            'auto_return': 'approved',
             # Carries our purchase id so 4B-2's webhook can map an
             # incoming payment notification back to this exact row.
             'external_reference': str(purchase.id),

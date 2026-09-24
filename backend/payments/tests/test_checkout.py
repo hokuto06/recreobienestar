@@ -67,6 +67,27 @@ class CheckoutInitiationTests(APITestCase):
         self.assertFalse(purchase.mp_status)
 
     @patch('payments.views.mercadopago.SDK')
+    def test_preference_has_auto_return_and_absolute_https_success_url(self, mock_sdk_class):
+        # secure=True simulates production, where SECURE_SSL_REDIRECT +
+        # nginx's X-Forwarded-Proto make request.scheme 'https' by the
+        # time this view runs — auto_return requires an absolute https
+        # success URL or Mercado Pago silently refuses to honor it.
+        mock_sdk_class.return_value.preference.return_value.create.return_value = FakeMPResponse(
+            201, {'id': 'pref-789', 'init_point': 'https://sandbox.mercadopago.com/checkout/pref-789'},
+        )
+        self.client.force_login(self.user)
+
+        self.client.post('/api/checkout/', {'offering': self.offering.slug}, format='json', secure=True)
+
+        sent_preference = mock_sdk_class.return_value.preference.return_value.create.call_args[0][0]
+        self.assertEqual(sent_preference['auto_return'], 'approved')
+        success_url = sent_preference['back_urls']['success']
+        self.assertTrue(success_url.startswith('https://'))
+        self.assertTrue(success_url.endswith('/pago/exito/'))
+        # Absolute, not a bare path — auto_return needs a fully-qualified URL.
+        self.assertIn('://', success_url)
+
+    @patch('payments.views.mercadopago.SDK')
     def test_anonymous_user_rejected_and_no_purchase_created(self, mock_sdk_class):
         resp = self._post({'offering': self.offering.slug})
         self.assertIn(resp.status_code, (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN))
