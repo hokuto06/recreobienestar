@@ -156,4 +156,49 @@
         });
     });
   });
+
+  /* ---------- Empezar prueba gratuita (Fase 5B-1) ----------
+     Same CSRF-via-meta-tag pattern as Comprar/Favoritos above. No card,
+     no Mercado Pago, no external redirect involved — a successful
+     /api/trial/ call just means "go straight to the videoteca". Any
+     failure (already used the trial, already on a paid plan, network
+     error) shows a clear message in [data-trial-error] instead of
+     failing silently. */
+  document.querySelectorAll('[data-trial-form]').forEach(function (form) {
+    form.addEventListener('submit', function (evt) {
+      evt.preventDefault();
+      var button = form.querySelector('[data-trial-submit]');
+      var errorBox = document.querySelector('[data-trial-error]');
+      if (!csrfToken || !button || button.disabled) { return; }
+      if (errorBox) { errorBox.hidden = true; }
+      button.disabled = true;
+      var originalLabel = button.textContent;
+      button.textContent = 'Activando tu prueba…';
+
+      fetch('/api/trial/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken,
+          'Accept': 'application/json',
+        },
+      })
+        .then(function (resp) {
+          return resp.json().catch(function () { return {}; }).then(function (data) {
+            if (!resp.ok) {
+              throw new Error(data.detail || 'No se pudo activar la prueba. Intentá de nuevo en unos minutos.');
+            }
+            window.location.href = '/videoteca/';
+          });
+        })
+        .catch(function (err) {
+          button.disabled = false;
+          button.textContent = originalLabel;
+          if (errorBox) {
+            errorBox.textContent = (err && err.message) || 'No se pudo activar la prueba. Intentá de nuevo en unos minutos.';
+            errorBox.hidden = false;
+          }
+        });
+    });
+  });
 })();

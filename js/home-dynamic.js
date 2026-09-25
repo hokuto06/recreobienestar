@@ -156,7 +156,17 @@
             }).join('') + '</ul>'
           : '<p style="margin-top:0.75rem;color:var(--color-text-muted)">' + esc(descriptionLines[0] || '') + '</p>';
         var variantClass = PLAN_VARIANT_CLASS[plan.visual_variant] || '';
-        var ctaLabel = plan.cta_label || 'Sumarme';
+        // Fase 5B-1: la tarjeta de la prueba gratuita (tier=plan1, el
+        // mismo identificador fijo que memberships.views.StartTrialView
+        // usa server-side para saber a qué plan corresponde "la prueba")
+        // lleva a /prueba-gratis/ en vez de /registro/ — ese botón ya no
+        // registra una cuenta nueva, inicia la prueba de la cuenta ya
+        // logueada. Se ignora cta_label acá a propósito: ese campo es
+        // para el texto de "sumarse a un plan pago", que ya no aplica a
+        // este botón. Mensual/Anual siguen exactamente igual que antes.
+        var isTrialPlan = plan.tier === 'plan1';
+        var ctaHref = isTrialPlan ? '/prueba-gratis/' : '/registro/';
+        var ctaLabel = isTrialPlan ? 'Empezar prueba' : (plan.cta_label || 'Sumarme');
         return (
           '<div class="card plan-card' + (variantClass ? ' ' + variantClass : '') + '">' +
             (plan.badge ? '<span class="plan-badge">' + esc(plan.badge) + '</span>' : '') +
@@ -164,7 +174,7 @@
             '<span class="plan-name">' + esc(plan.subtitle || plan.name) + '</span>' +
             '<span class="plan-price">$' + priceLabel + ' ' + esc(plan.currency) + (periodLabel ? '<small>' + periodLabel + '</small>' : '') + '</span>' +
             descriptionHtml +
-            '<a class="btn btn-primary btn-block" href="/registro/">' + esc(ctaLabel) + '</a>' +
+            '<a class="btn btn-primary btn-block" href="' + ctaHref + '">' + esc(ctaLabel) + '</a>' +
           '</div>'
         );
       }).join('');

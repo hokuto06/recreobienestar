@@ -18,7 +18,7 @@ catalog/views.py:VideoViewSet does the same for the API. A single
 video_detail check doesn't need this — one video means one query either
 way.
 """
-from common.choices import VideoAccessLevel
+from common.choices import SubscriptionStatus, VideoAccessLevel
 from payments.models import OfferingPurchase, PurchaseStatus
 
 
@@ -54,6 +54,50 @@ def user_has_any_active_paid_plan(user, at=None, subscriptions=None):
     return _active_subscriptions_matching(
         user, subscriptions, at,
         predicate=lambda plan: plan.is_active,
+    )
+
+
+def user_has_active_trial(user, at=None, subscriptions=None):
+    """Phase 5B-1: True if `user` has a currently-active (is_active())
+    Subscription in TRIAL status, on a currently-active plan — regardless
+    of WHICH plan. A trial is a taste of EVERYTHING ("Probá todos los
+    planes de entrenamiento"): full paid-catalog access while it lasts,
+    unlike user_has_active_plan (tier-specific, and what governs a
+    subscription once it's ACTIVE rather than TRIAL).
+
+    Deliberately a standalone loop rather than routed through
+    _active_subscriptions_matching: that helper's predicate only sees
+    `plan`, not `subscription`, and this needs to filter on
+    `subscription.status` too — not worth widening a helper two other,
+    already-tested callers depend on for one extra branch.
+    """
+    if user is None or not getattr(user, 'is_authenticated', False):
+        return False
+    candidates = (
+        subscriptions if subscriptions is not None
+        else user.subscriptions.select_related('plan').all()
+    )
+    for subscription in candidates:
+        if (
+            subscription.status == SubscriptionStatus.TRIAL
+            and subscription.plan.is_active
+            and subscription.is_active(at=at)
+        ):
+            return True
+    return False
+
+
+def user_has_expired_trial(user):
+    """Phase 5B-1: True if `user` has ever started a trial (a Subscription
+    with status=TRIAL) whose access window has since elapsed. NOT an
+    access decision (that's can_access_video/user_has_active_trial above)
+    — used only for locked-content messaging (catalog.public_views.
+    video_detail) to distinguish "your trial finished" from "you never
+    had access"."""
+    if user is None or not getattr(user, 'is_authenticated', False):
+        return False
+    return any(
+        sub.is_expired() for sub in user.subscriptions.filter(status=SubscriptionStatus.TRIAL)
     )
 
 
@@ -123,6 +167,13 @@ def can_access_video(user, video, at=None, subscriptions=None, purchases=None):
         (Phase 4A) a completed offering purchase, same as above
       - an expired subscription grants no access, even if its status field
         hasn't caught up yet (see Subscription.is_expired)
+      - Phase 5B-1: a currently-active TRIAL-status subscription grants
+        access to ANY paid video, regardless of the video's own tier — a
+        taste of everything, not just the trialed plan's tier (see
+        user_has_active_trial). Checked right after the FREE branch, so
+        it can only ever ADD access for a non-free video; it never runs
+        for (and can never override) the staff, unpublished, or FREE
+        branches above.
 
     Phase 4A note: membership and offering-purchase are two INDEPENDENT,
     additive access paths — OR'd together, never replacing one another.
@@ -146,6 +197,9 @@ def can_access_video(user, video, at=None, subscriptions=None, purchases=None):
         return False
 
     if video.access_level == VideoAccessLevel.FREE:
+        return True
+
+    if user_has_active_trial(user, at=at, subscriptions=subscriptions):
         return True
 
     if video.access_level == VideoAccessLevel.ALL_PAID:
