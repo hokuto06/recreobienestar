@@ -109,6 +109,24 @@ class AccessControlTests(TestCase):
         video = self._video(access_level='plan1')
         self.assertFalse(can_access_video(self.user, video))
 
+    # ── Phase 5A: grace period, end-to-end via can_access_video ────────
+    def test_grace_period_keeps_video_accessible_past_ends_at_then_denies_after(self):
+        video = self._video(access_level='plan1')
+        sub = Subscription.objects.create(
+            user=self.user, plan=self.plan1, status='active',
+            ends_at=self.now - timedelta(hours=1),
+            grace_ends_at=self.now + timedelta(days=3),
+        )
+        self.assertTrue(can_access_video(self.user, video))
+
+        # Grace elapses too — access is lost, no code change needed to
+        # observe it: is_expired() is evaluated live against `at`.
+        self.assertFalse(can_access_video(self.user, video, at=self.now + timedelta(days=4)))
+        # Same outcome once grace_ends_at itself is in the past.
+        sub.grace_ends_at = self.now - timedelta(hours=1)
+        sub.save(update_fields=['grace_ends_at'])
+        self.assertFalse(can_access_video(self.user, video))
+
     def test_cancelled_retains_access_until_end_date(self):
         # Cancelling stops future renewal, but a member who already paid
         # for the current period keeps access until ends_at passes.
@@ -180,6 +198,88 @@ class SubscriptionModelTests(TestCase):
             ends_at=self.now - timedelta(minutes=1),
         )
         self.assertFalse(sub.is_active())
+
+    # ── Phase 5A: grace period extends the access window ───────────────
+    def test_grace_ends_at_in_future_grants_access_past_ends_at(self):
+        sub = Subscription.objects.create(
+            user=self.user, plan=self.plan, status='active',
+            ends_at=self.now - timedelta(days=1),
+            grace_ends_at=self.now + timedelta(days=2),
+        )
+        self.assertTrue(sub.is_active())
+
+    def test_both_ends_at_and_grace_ends_at_past_denies_access(self):
+        sub = Subscription.objects.create(
+            user=self.user, plan=self.plan, status='active',
+            ends_at=self.now - timedelta(days=3),
+            grace_ends_at=self.now - timedelta(days=1),
+        )
+        self.assertFalse(sub.is_active())
+
+    def test_grace_ends_at_earlier_than_ends_at_does_not_shorten_access(self):
+        # A grace stamp earlier than ends_at (e.g. stale, or set by
+        # mistake) must never shorten an otherwise-valid window — ends_at
+        # alone governs, exactly as if grace_ends_at were unset.
+        sub = Subscription.objects.create(
+            user=self.user, plan=self.plan, status='active',
+            ends_at=self.now + timedelta(days=5),
+            grace_ends_at=self.now + timedelta(days=1),
+        )
+        self.assertTrue(sub.is_active())
+
+    def test_past_due_with_future_grace_ends_at_denies_access(self):
+        # Grace extends an otherwise-live subscription; it never
+        # resurrects one already marked PAST_DUE.
+        sub = Subscription.objects.create(
+            user=self.user, plan=self.plan, status='past_due',
+            ends_at=self.now - timedelta(days=1),
+            grace_ends_at=self.now + timedelta(days=10),
+        )
+        self.assertFalse(sub.is_active())
+
+    def test_expired_status_with_future_grace_ends_at_denies_access(self):
+        sub = Subscription.objects.create(
+            user=self.user, plan=self.plan, status='expired',
+            ends_at=self.now - timedelta(days=1),
+            grace_ends_at=self.now + timedelta(days=10),
+        )
+        self.assertFalse(sub.is_active())
+
+    def test_trial_grants_access_with_trial_ends_at_set_but_unused(self):
+        # trial_ends_at is stored (Phase 5A) but is_active() doesn't
+        # consult it yet — TRIAL keeps granting access exactly as before.
+        sub = Subscription.objects.create(
+            user=self.user, plan=self.plan, status='trial',
+            ends_at=self.now + timedelta(days=7),
+            trial_ends_at=self.now + timedelta(days=7),
+        )
+        self.assertTrue(sub.is_active())
+
+    def test_start_grace_stamps_grace_ends_at_from_plan_grace_days(self):
+        self.plan.grace_days = 5
+        self.plan.save()
+        sub = Subscription.objects.create(
+            user=self.user, plan=self.plan, status='active',
+            ends_at=self.now - timedelta(days=1),
+        )
+        sub.start_grace()
+        self.assertIsNotNone(sub.grace_ends_at)
+        self.assertAlmostEqual(
+            sub.grace_ends_at, timezone.now() + timedelta(days=5), delta=timedelta(seconds=5),
+        )
+        # start_grace() does not save — matches OfferingPurchase's own
+        # status-transition convention (caller controls save()).
+        sub.refresh_from_db()
+        self.assertIsNone(sub.grace_ends_at)
+
+    def test_clear_grace_resets_grace_ends_at(self):
+        sub = Subscription.objects.create(
+            user=self.user, plan=self.plan, status='active',
+            ends_at=self.now + timedelta(days=10),
+            grace_ends_at=self.now + timedelta(days=2),
+        )
+        sub.clear_grace()
+        self.assertIsNone(sub.grace_ends_at)
 
 
 class OfferingPurchaseAccessTests(TestCase):
