@@ -47,7 +47,15 @@ class SubscriptionStatus(models.TextChoices):
 # or lose access according to ends_at".)
 #
 # PAST_DUE is intentionally excluded: a lapsed payment does not grant
-# access, matching "an expired membership loses access immediately".
+# access, matching "an expired membership loses access immediately" — with
+# one clarification added in Phase 5A: a failed charge does NOT flip a
+# subscription to PAST_DUE right away. It stays ACTIVE (still in this
+# tuple) with Subscription.grace_ends_at stamped, which extends
+# is_active()'s access window past ends_at for the configured grace
+# period (MembershipPlan.grace_days) — matching Mercado Pago's own
+# automatic retry behavior on a declined recurring charge. PAST_DUE is
+# reached (and access lost) only once that grace period has ALSO
+# elapsed with no successful retry — see Subscription._effective_ends_at.
 ENTITLED_STATUSES = (
     SubscriptionStatus.TRIAL,
     SubscriptionStatus.ACTIVE,

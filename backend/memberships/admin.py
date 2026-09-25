@@ -9,7 +9,7 @@ from .models import MembershipPlan, Subscription
 class MembershipPlanAdmin(admin.ModelAdmin):
     list_display = (
         'name', 'subtitle', 'tier', 'visual_variant', 'badge', 'price', 'currency', 'duration_days',
-        'is_active', 'display_order', 'subscriber_count',
+        'trial_days', 'grace_days', 'is_active', 'display_order', 'subscriber_count',
     )
     # `price` editable straight from the changelist — Carla's most common
     # edit — still goes through the model's MinValueValidator on save.
@@ -28,6 +28,7 @@ class MembershipPlanAdmin(admin.ModelAdmin):
         }),
         ('Presentación', {'fields': ('badge', 'visual_variant', 'cta_label')}),
         ('Precio', {'fields': ('price', 'currency', 'duration_days')}),
+        ('Suscripción recurrente', {'fields': ('trial_days', 'grace_days')}),
         ('Visibilidad', {'fields': ('is_active', 'display_order')}),
         ('Fechas', {'fields': ('created_at', 'updated_at'), 'classes': ('collapse',)}),
     )
@@ -53,7 +54,7 @@ class MembershipPlanAdmin(admin.ModelAdmin):
 class SubscriptionAdmin(admin.ModelAdmin):
     list_display = (
         'user', 'plan', 'status', 'current_access_badge',
-        'starts_at', 'ends_at', 'cancelled_at',
+        'starts_at', 'ends_at', 'trial_ends_at', 'grace_ends_at', 'cancelled_at',
     )
     list_filter = ('status', 'plan')
     search_fields = ('user__username', 'user__email', 'plan__name')
@@ -64,6 +65,12 @@ class SubscriptionAdmin(admin.ModelAdmin):
     fieldsets = (
         (None, {'fields': ('user', 'plan', 'status')}),
         ('Vigencia', {'fields': ('starts_at', 'ends_at', 'cancelled_at')}),
+        # trial_ends_at/grace_ends_at: hoy solo grace_ends_at afecta el
+        # acceso (extiende la ventana de is_active() más allá de ends_at —
+        # ver Subscription._effective_ends_at); trial_ends_at todavía no
+        # tiene efecto (Fase 5A), pero ya es editable a mano acá para
+        # probar el flujo sin depender de Mercado Pago, igual que 4A.
+        ('Suscripción recurrente (Fase 5A)', {'fields': ('trial_ends_at', 'grace_ends_at')}),
         ('Fechas', {'fields': ('created_at', 'updated_at'), 'classes': ('collapse',)}),
     )
 
