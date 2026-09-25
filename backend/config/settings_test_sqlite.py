@@ -46,3 +46,22 @@ STORAGES = {
 # same path production traffic takes. Production (config.settings) never
 # imports this file and is unaffected either way.
 AXES_ENABLED = False
+
+# config.settings' LOGGING dict (added so real payment activity is
+# visible in `docker logs recreo-django` — see its own comment there)
+# explicitly configures 'payments'/'memberships'/'catalog'/'accounts'/
+# 'site_content' at DJANGO_LOG_LEVEL (INFO by default), which would print
+# a line for every successful checkout/webhook/return-view test in this
+# suite — no test here inspects log content (no assertLogs), so that's
+# pure noise. Bumped to WARNING here, for root and every explicitly
+# configured logger alike, so `manage.py test` output stays readable;
+# genuine warnings/errors (e.g. an unexpected exception) still print
+# exactly as they did before this LOGGING config existed at all, when
+# Python's lastResort handler already surfaced WARNING and above.
+LOGGING = {  # noqa: F405
+    **LOGGING,  # noqa: F405
+    'root': {**LOGGING['root'], 'level': 'WARNING'},  # noqa: F405
+    'loggers': {
+        name: {**cfg, 'level': 'WARNING'} for name, cfg in LOGGING['loggers'].items()  # noqa: F405
+    },
+}

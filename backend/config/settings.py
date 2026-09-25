@@ -289,3 +289,82 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
+
+# ── Logging ──────────────────────────────────────────────────────────────
+# No LOGGING setting existed before this. With none, Python's logging
+# module has no handler anywhere in the hierarchy for a plain
+# logging.getLogger(__name__) call (e.g. every logger in payments/views.py
+# and payments/services.py) — it silently falls back to `lastResort`
+# (stderr, WARNING and above only). That meant every logger.info() call —
+# including the payment success-path lines that record a purchase actually
+# completing — was discarded outright, and only warnings/errors ever
+# surfaced. Now that real money moves through this system, those INFO
+# lines need to actually reach somewhere, so a problematic payment can be
+# investigated after the fact.
+#
+# Console-only, to stdout: this app always runs inside the recreo-django
+# container (see docker-compose.yml/ARCHITECTURE.md), which has no
+# persistent local disk for logs — the container is recreated on every
+# deploy, so a file handler's contents would just be lost. `docker logs
+# recreo-django` is how logs are actually read in production; a
+# StreamHandler with no filter (unlike Django's own default 'console'
+# handler, which only fires when DEBUG=True) is what makes that work.
+DJANGO_LOG_LEVEL = env('DJANGO_LOG_LEVEL', default='INFO')
+
+LOGGING = {
+    'version': 1,
+    # False, not the dictConfig default of True: this LOGGING dict is
+    # applied AFTER Django's own baseline (DEFAULT_LOGGING, which sets up
+    # 'django' / 'django.server' for the admin's console-filtered handler,
+    # the mail_admins error handler, and the per-request access line).
+    # True here would tear those out the moment this dict is applied.
+    'disable_existing_loggers': False,
+    'formatters': {
+        'default': {
+            'format': '{asctime} {levelname} {name} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'default',
+        },
+    },
+    # Catches any logger with no more specific configuration below —
+    # in particular every logger.getLogger(__name__) call anywhere in
+    # this codebase that isn't one of the app namespaces explicitly
+    # listed, third-party library loggers (gunicorn, urllib3, ...), and
+    # 'django' itself (which Django's own baseline already handles, but
+    # also propagates up to here by default — a 500 may print twice,
+    # once via mail_admins' console-backend fallback and once via this
+    # root handler; harmless, and deliberately left alone rather than
+    # touching Django's own 'django'/'django.server' logger config,
+    # which this task has no reason to change).
+    'root': {
+        'handlers': ['console'],
+        'level': DJANGO_LOG_LEVEL,
+    },
+    'loggers': {
+        # The one genuinely noisy logger: Django logs every single SQL
+        # query at DEBUG here (only actually emitted when DEBUG=True —
+        # see django.db.backends.utils.CursorDebugWrapper — so this is a
+        # no-op in production regardless, but pinned at WARNING
+        # explicitly so bumping DJANGO_LOG_LEVEL down for troubleshooting
+        # never floods the log with query spam).
+        'django.db.backends': {'level': 'WARNING'},
+        # This project's own apps. payments is the one with logger.*
+        # calls today (the security-critical checkout/webhook/return-page
+        # path — see payments/services.py and payments/views.py); the
+        # rest are listed too so logging added to them later is visible
+        # without another settings change. No 'handlers' key on any of
+        # these — they rely on propagation to the root handler above
+        # rather than a second handler of their own, so nothing prints
+        # twice.
+        'payments': {'level': DJANGO_LOG_LEVEL},
+        'memberships': {'level': DJANGO_LOG_LEVEL},
+        'catalog': {'level': DJANGO_LOG_LEVEL},
+        'accounts': {'level': DJANGO_LOG_LEVEL},
+        'site_content': {'level': DJANGO_LOG_LEVEL},
+    },
+}
