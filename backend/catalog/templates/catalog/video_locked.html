@@ -18,6 +18,8 @@ title/description, which are not secret.
   <p style="margin-top:var(--space-4);color:var(--color-text-muted)">
     {% if not video.is_published %}
       Este contenido todavía no está publicado.
+    {% elif trial_expired %}
+      Tu prueba gratuita de 7 días terminó. Elegí un plan para seguir con acceso completo.
     {% else %}
       Este video forma parte de {{ video.get_access_level_display|lower }}.
       {% if not user.is_authenticated %}Ingresá a tu cuenta o {% endif %}

@@ -31,6 +31,10 @@ urlpatterns = [
     # offering cards (js/home-dynamic.js) link here instead of the old
     # external payment_url_ars/payment_url_usd links.
     path('', include('site_content.urls')),
+    # /prueba-gratis/ — starts the free 7-day trial (Phase 5B-1); see
+    # memberships/public_views.py:prueba_gratis. The home's FREE TRIAL
+    # card (js/home-dynamic.js) links here instead of /registro/.
+    path('', include('memberships.urls')),
 ]
 
 def serve_media(request, path):
