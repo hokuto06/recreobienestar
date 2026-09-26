@@ -43,7 +43,7 @@ class RegisterView(CreateView):
     def form_valid(self, form):
         response = super().form_valid(form)
         auth_login(self.request, self.object, backend='accounts.backends.EmailOrUsernameModelBackend')
-        messages.success(self.request, f'¡Bienvenida, {self.object.profile.name_for_display}! Tu cuenta fue creada.')
+        messages.success(self.request, f'¡Hola, {self.object.profile.name_for_display}! Tu cuenta fue creada.')
         return response
 
 
