@@ -201,4 +201,49 @@
         });
     });
   });
+
+  /* ---------- Suscribirme a un plan pago (Fase 5B-2a) ----------
+     Same CSRF-via-meta-tag pattern and failure handling as Comprar
+     above: /api/subscribe/ answers with JSON (Mercado Pago's init_point
+     for the recurring-charge authorization), so the redirect happens
+     here. Any failure shows a clear message in [data-subscribe-error]. */
+  document.querySelectorAll('[data-subscribe-form]').forEach(function (form) {
+    form.addEventListener('submit', function (evt) {
+      evt.preventDefault();
+      var button = form.querySelector('[data-subscribe-submit]');
+      var errorBox = document.querySelector('[data-subscribe-error]');
+      var slug = form.getAttribute('data-plan-slug');
+      if (!csrfToken || !button || !slug || button.disabled) { return; }
+      if (errorBox) { errorBox.hidden = true; }
+      button.disabled = true;
+      var originalLabel = button.textContent;
+      button.textContent = 'Redirigiendo a Mercado Pago…';
+
+      fetch('/api/subscribe/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken,
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ plan: slug }),
+      })
+        .then(function (resp) {
+          return resp.json().catch(function () { return {}; }).then(function (data) {
+            if (!resp.ok || !data.init_point) {
+              throw new Error(data.detail || 'No se pudo iniciar la suscripción. Intentá de nuevo en unos minutos.');
+            }
+            window.location.href = data.init_point;
+          });
+        })
+        .catch(function (err) {
+          button.disabled = false;
+          button.textContent = originalLabel;
+          if (errorBox) {
+            errorBox.textContent = (err && err.message) || 'No se pudo iniciar la suscripción. Intentá de nuevo en unos minutos.';
+            errorBox.hidden = false;
+          }
+        });
+    });
+  });
 })();

@@ -210,3 +210,49 @@ def can_access_video(user, video, at=None, subscriptions=None, purchases=None):
         return True
 
     return user_has_purchased_offering_unlocking(user, video, purchases=purchases)
+
+
+def user_has_active_paid_subscription(user, at=None, subscriptions=None):
+    """Phase 5B-2a: True if `user` has a currently-active (is_active())
+    subscription that is NOT the free trial — i.e. something they pay
+    for (or that Carla granted by hand). Used only to block a second
+    paid signup (no plan switching yet — see StartSubscriptionView).
+
+    Deliberately NOT user_has_any_active_paid_plan: that one counts ANY
+    active subscription on an active plan, including a TRIAL-status one,
+    so it would wrongly block exactly the "trial member subscribes"
+    path this phase exists for. A still-PENDING paid signup doesn't count
+    either (is_active() is False for PENDING — not in ENTITLED_STATUSES).
+    """
+    if user is None or not getattr(user, 'is_authenticated', False):
+        return False
+    candidates = (
+        subscriptions if subscriptions is not None
+        else user.subscriptions.select_related('plan').all()
+    )
+    return any(
+        not subscription.is_trial
+        and subscription.status != SubscriptionStatus.TRIAL
+        and subscription.is_active(at=at)
+        for subscription in candidates
+    )
+
+
+# Phase 5B-2a: Mercado Pago preapproval billing cadence, derived from
+# MembershipPlan.duration_days. MP's auto_recurring only accepts
+# frequency_type 'days' or 'months' (no 'years'), so yearly is 12 months.
+# Deliberately an explicit whitelist rather than arithmetic on
+# duration_days: a plan with any other value (unset, 31, 90, ...) is not
+# billable through this flow until someone decides what cadence it means
+# — billing_cadence_for_plan() returns None and the signup is refused,
+# never guessed.
+_BILLING_CADENCE_BY_DURATION_DAYS = {
+    30: (1, 'months'),
+    365: (12, 'months'),
+}
+
+
+def billing_cadence_for_plan(plan):
+    """(frequency, frequency_type) for `plan`'s MP preapproval, or None if
+    its duration_days doesn't map to a known cadence."""
+    return _BILLING_CADENCE_BY_DURATION_DAYS.get(plan.duration_days)

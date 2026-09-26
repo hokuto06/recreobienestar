@@ -1,5 +1,8 @@
+import logging
 from datetime import timedelta
 
+import mercadopago
+from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework import generics, status
@@ -11,7 +14,11 @@ from common.choices import PlanTier, SubscriptionStatus
 
 from .models import MembershipPlan, Subscription
 from .serializers import MembershipPlanSerializer
-from .services import user_has_any_active_paid_plan
+from .services import (
+    billing_cadence_for_plan, user_has_active_paid_subscription, user_has_any_active_paid_plan,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class MembershipPlanListView(generics.ListAPIView):
@@ -95,3 +102,152 @@ class StartTrialView(APIView):
             )
 
         return Response({'ends_at': subscription.ends_at}, status=status.HTTP_201_CREATED)
+
+
+def resolve_purchasable_plan(reference):
+    """Looks up an active MembershipPlan by slug OR numeric id (same shape
+    as payments.views._resolve_active_offering). Returns None (never
+    raises) if it doesn't exist or isn't active. Does NOT exclude the
+    free-trial plan — callers reject that one explicitly, with its own
+    message."""
+    if reference is None:
+        return None
+    if isinstance(reference, int) or (isinstance(reference, str) and reference.isdigit()):
+        return MembershipPlan.objects.filter(pk=reference, is_active=True).first()
+    return MembershipPlan.objects.filter(slug=reference, is_active=True).first()
+
+
+class StartSubscriptionView(APIView):
+    """POST /api/subscribe/ — starts a paid-plan signup (Phase 5B-2a):
+    creates a Mercado Pago preapproval (recurring charge authorization)
+    and hands back its init_point for the browser to redirect to. Body:
+    {"plan": "<slug-or-id>"}.
+
+    Mirrors payments.views.CheckoutInitiationView: authenticated only,
+    SessionAuthentication (and its CSRF check) left fully in effect, and
+    price/currency NEVER read from the request — plan.price/plan.currency
+    straight from the DB are what's sent to MP and snapshotted on the row.
+
+    NO ACCESS IS GRANTED HERE. The Subscription is created PENDING, which
+    is not in common.choices.ENTITLED_STATUSES, so is_active() — and with
+    it can_access_video() — stays False for it. Only MP's confirmation
+    (the subscription webhook, Phase 5B-2b) will ever move it to ACTIVE.
+
+    Rejections: unknown/inactive plan (404), the free-trial plan (400),
+    a plan whose duration_days has no known billing cadence (503 — see
+    memberships.services.billing_cadence_for_plan), an account with no
+    email (400 — MP requires payer_email), and a user who already has an
+    active paid subscription (409 — no plan switching in this phase).
+
+    TRIAL TERMINATION: if the user has an active free trial, it is ended
+    (Subscription.supersede_trial) — but ONLY after MP accepted the
+    preapproval. A failed signup leaves the trial exactly as it was.
+
+    ON MP FAILURE: the PENDING row is marked EXPIRED with ends_at=now
+    rather than deleted (keeps an audit trail of the attempt, same as
+    CheckoutInitiationView's FAILED purchase) and rather than CANCELLED —
+    CANCELLED is in ENTITLED_STATUSES, so it must never be used for a
+    subscription that was never paid for.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        plan = resolve_purchasable_plan(request.data.get('plan'))
+        if plan is None:
+            return Response(
+                {'detail': 'Plan no encontrado o no disponible.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if plan.tier == PlanTier.PLAN1:
+            return Response(
+                {'detail': 'La prueba gratuita no se contrata como suscripción paga.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        cadence = billing_cadence_for_plan(plan)
+        if cadence is None:
+            logger.error(
+                'MembershipPlan %s has duration_days=%r with no known billing cadence — '
+                'refusing subscription signup',
+                plan.id, plan.duration_days,
+            )
+            return Response(
+                {'detail': 'Este plan no está disponible para suscribirse en este momento.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        frequency, frequency_type = cadence
+
+        if not request.user.email:
+            return Response(
+                {'detail': 'Tu cuenta no tiene un email cargado — agregalo en Mi cuenta para suscribirte.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if user_has_active_paid_subscription(request.user):
+            return Response(
+                {'detail': 'Ya tenés una membresía activa. Por ahora no se puede cambiar de plan.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        subscription = Subscription.objects.create(
+            user=request.user, plan=plan, status=SubscriptionStatus.PENDING,
+            starts_at=timezone.now(), amount=plan.price, currency=plan.currency,
+        )
+
+        base_url = f'{request.scheme}://{request.get_host()}'
+        preapproval_data = {
+            'reason': f'{plan.name} — Recreo Bienestar',
+            # Carries our subscription id so 5B-2b's webhook can map MP's
+            # notifications back to this exact row (mp_preapproval_id is
+            # the other anchor).
+            'external_reference': str(subscription.id),
+            'payer_email': request.user.email,
+            # No free_trial here on purpose: the free trial is entirely
+            # ours (Phase 5B-1) — MP bills from day one.
+            'auto_recurring': {
+                'frequency': frequency,
+                'frequency_type': frequency_type,
+                'transaction_amount': float(plan.price),
+                'currency_id': plan.currency,
+            },
+            'back_url': f'{base_url}/membresia/estado/',
+            'status': 'pending',
+        }
+
+        try:
+            sdk = mercadopago.SDK(settings.MERCADOPAGO_ACCESS_TOKEN)
+            result = sdk.preapproval().create(preapproval_data)
+            result.raise_for_status()
+            preapproval = result['response']
+            if not preapproval.get('id') or not preapproval.get('init_point'):
+                raise ValueError('preapproval response missing id/init_point')
+        except Exception:
+            logger.exception(
+                'Mercado Pago preapproval creation failed for Subscription %s', subscription.id,
+            )
+            subscription.status = SubscriptionStatus.EXPIRED
+            subscription.ends_at = timezone.now()
+            subscription.save(update_fields=['status', 'ends_at', 'updated_at'])
+            return Response(
+                {'detail': 'No se pudo iniciar la suscripción. Intentá de nuevo en unos minutos.'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        now = timezone.now()
+        with transaction.atomic():
+            subscription.mp_preapproval_id = str(preapproval['id'])
+            subscription.mp_status = preapproval.get('status', '') or ''
+            subscription.save(update_fields=['mp_preapproval_id', 'mp_status', 'updated_at'])
+
+            trials = Subscription.objects.select_for_update().select_related('plan').filter(
+                user=request.user, is_trial=True,
+            )
+            for trial in trials:
+                if trial.is_active(at=now):
+                    trial.supersede_trial(subscription, at=now)
+                    trial.save(update_fields=['ends_at', 'superseded_by', 'updated_at'])
+
+        return Response(
+            {'init_point': preapproval['init_point'], 'preapproval_id': subscription.mp_preapproval_id},
+            status=status.HTTP_201_CREATED,
+        )

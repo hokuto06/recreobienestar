@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}{{ plan.name }} | Recreo Bienestar{% endblock %}
+{% block content %}
+<section class="container member-hero">
+  <span class="eyebrow">{{ plan.name }}</span>
+  <h1>{{ plan.subtitle|default:plan.name }}</h1>
+  <p class="lede" style="margin-top:0.5rem;max-width:60ch">
+    ${{ plan.price }} {{ plan.currency }}{% if cadence_label %} {{ cadence_label }}{% endif %}.
+    El cobro es automático con Mercado Pago y lo podés cancelar cuando quieras.
+  </p>
+  {% if plan.description %}
+    <ul class="plan-features" style="margin-top:1rem">
+      {% for line in plan.description.splitlines %}{% if line.strip %}<li>{{ line.strip }}</li>{% endif %}{% endfor %}
+    </ul>
+  {% endif %}
+</section>
+
+<section class="container section--tight" style="max-width:32ch">
+  {% if eligible %}
+    {% comment %}
+    Same shape as the offering "Comprar" and the trial "Empezar prueba"
+    forms: site.js POSTs to /api/subscribe/ with the CSRF token and
+    redirects to Mercado Pago's init_point. data-subscribe-error is shown
+    on any failure — never a silent one.
+    {% endcomment %}
+    {% if has_active_trial %}
+      <p style="color:var(--color-text-muted)">Al suscribirte, tu prueba gratuita termina y empieza tu plan.</p>
+    {% endif %}
+    <div class="alert alert-error" data-subscribe-error hidden></div>
+    <form data-subscribe-form data-plan-slug="{{ plan.slug }}">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary btn-block" data-subscribe-submit>Suscribirme</button>
+    </form>
+  {% elif has_active_paid_subscription %}
+    <p style="color:var(--color-text-muted)">Ya tenés una membresía activa. Por ahora no se puede cambiar de plan.</p>
+    <a class="btn btn-primary btn-block" href="{% url 'catalog:video_library' %}">Ir a la videoteca</a>
+  {% else %}
+    <p style="color:var(--color-text-muted)">Este plan no está disponible para suscribirse en este momento.</p>
+    <a class="btn btn-primary btn-block" href="/#membresias">Ver planes de membresía</a>
+  {% endif %}
+</section>
+{% endblock %}

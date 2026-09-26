@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Tu suscripción | Recreo Bienestar{% endblock %}
+{% block content %}
+<section class="container member-hero">
+  <span class="eyebrow">Suscripción</span>
+  {% if is_active %}
+    <h1>¡Tu membresía está activa!</h1>
+    <p class="lede" style="margin-top:0.5rem;max-width:60ch">{{ subscription.plan.name }} ya está habilitado.</p>
+  {% elif subscription and subscription.status == 'pending' %}
+    <h1>Estamos confirmando tu suscripción</h1>
+    <p class="lede" style="margin-top:0.5rem;max-width:60ch">
+      Mercado Pago nos avisa cuando se confirme el pago de {{ subscription.plan.name }}.
+      Puede tardar unos minutos — el acceso se habilita automáticamente.
+    </p>
+  {% else %}
+    <h1>No encontramos una suscripción en curso</h1>
+    <p class="lede" style="margin-top:0.5rem;max-width:60ch">Si creés que es un error, escribinos.</p>
+  {% endif %}
+</section>
+<section class="container section--tight" style="max-width:32ch">
+  {% if is_active %}
+    <a class="btn btn-primary btn-block" href="{% url 'catalog:video_library' %}">Ir a la videoteca</a>
+  {% else %}
+    <a class="btn btn-primary btn-block" href="{% url 'accounts:dashboard' %}">Ir a mi cuenta</a>
+  {% endif %}
+</section>
+{% endblock %}

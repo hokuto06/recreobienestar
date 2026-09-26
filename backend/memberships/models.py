@@ -141,6 +141,34 @@ class Subscription(TimeStampedModel):
         ),
     )
 
+    # ── Phase 5B-2a: suscripción paga vía Mercado Pago (preapproval) ──────
+    # Todos opcionales/en blanco: las suscripciones creadas a mano o por la
+    # prueba gratuita no los usan. Los completa memberships.views.
+    # StartSubscriptionView al crear el preapproval; mp_payer_id,
+    # mp_status, next_payment_date y last_charge_* quedan para el webhook
+    # de suscripciones (5B-2b).
+    mp_preapproval_id = models.CharField(max_length=100, blank=True, default='', db_index=True)
+    mp_payer_id = models.CharField(max_length=100, blank=True, default='')
+    # El vocabulario crudo de MP (pending/authorized/paused/cancelled),
+    # separado de `status` por la misma razón que OfferingPurchase.mp_status:
+    # el acceso solo lee `status`, nunca este campo.
+    mp_status = models.CharField(max_length=30, blank=True, default='')
+    next_payment_date = models.DateTimeField(null=True, blank=True)
+    last_charge_payment_id = models.CharField(max_length=100, blank=True, default='')
+    last_charge_status = models.CharField(max_length=30, blank=True, default='')
+    # Foto del precio al momento del alta — plan.price puede cambiar
+    # después, y una suscripción histórica no debe reinterpretarse con el
+    # precio nuevo (mismo criterio que OfferingPurchase.amount/currency).
+    amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    currency = models.CharField(max_length=3, blank=True, default='')
+    # Una prueba gratuita terminada antes de tiempo porque la persona se
+    # suscribió a un plan pago: apunta a esa suscripción paga. Solo lo
+    # setea StartSubscriptionView, y solo si el preapproval se creó bien.
+    superseded_by = models.ForeignKey(
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='superseded_trials',
+        help_text='Suscripción paga que reemplazó a esta prueba gratuita.',
+    )
+
     class Meta:
         ordering = ['-created_at']
         verbose_name = 'Suscripción'
@@ -236,3 +264,15 @@ class Subscription(TimeStampedModel):
         start_grace(), for once a retried charge succeeds. Does NOT call
         save() (see start_grace). Not called from anywhere yet."""
         self.grace_ends_at = None
+
+    def supersede_trial(self, paid_subscription, at=None):
+        """Phase 5B-2a: ends this (trial) subscription's access right now
+        because the member subscribed to a paid plan. Sets ends_at to the
+        moment of supersession — is_active() turns False immediately via
+        the normal expiry check — and records which paid subscription
+        replaced it. status/is_trial/trial_ends_at are left as they were,
+        so the row still reads as "the one free trial this user had" (the
+        one-trial-per-user constraint keys off is_trial). Does NOT call
+        save() (see start_grace)."""
+        self.ends_at = at or timezone.now()
+        self.superseded_by = paid_subscription
