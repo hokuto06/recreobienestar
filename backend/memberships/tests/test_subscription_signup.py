@@ -18,7 +18,8 @@ from memberships.models import MembershipPlan, Subscription
 from memberships.services import (
     billing_cadence_for_plan, can_access_video, supersede_active_trial, user_has_active_trial,
 )
-from memberships.views import PENDING_SIGNUP_REUSE_WINDOW
+from memberships.views import PENDING_SIGNUP_REUSE_WINDOW, subscription_external_reference
+from payments.models import OfferingPurchase, PurchaseStatus
 from payments.tests.test_checkout import FakeMPResponse
 
 User = get_user_model()
@@ -120,11 +121,26 @@ class StartSubscriptionViewTests(_PlansMixin, APITestCase):
             'frequency': 1, 'frequency_type': 'months',
             'transaction_amount': 55000.0, 'currency_id': 'ARS',
         })
-        self.assertEqual(payload['external_reference'], str(sub.id))
+        self.assertEqual(payload['external_reference'], f'sub-{sub.id}')
         self.assertEqual(payload['payer_email'], 'socia@example.com')
         self.assertTrue(payload['back_url'].endswith('/membresia/estado/'))
         self.assertNotIn('free_trial', payload)
         self.assertNotIn('free_trial', payload['auto_recurring'])
+
+    @patch(SDK_PATH)
+    def test_external_reference_is_prefixed_not_a_bare_id(self, mock_sdk_class):
+        create = mock_sdk_class.return_value.preapproval.return_value.create
+        create.return_value = _ok_preapproval()
+        self.client.force_login(self.user)
+
+        self._post({'plan': self.monthly.slug})
+
+        reference = create.call_args[0][0]['external_reference']
+        sub = Subscription.objects.get(user=self.user)
+        self.assertEqual(reference, f'sub-{sub.id}')
+        self.assertNotEqual(reference, str(sub.id))
+        with self.assertRaises(ValueError):
+            int(reference)
 
     @patch(SDK_PATH)
     def test_preapproval_payload_yearly_is_twelve_months(self, mock_sdk_class):
@@ -504,3 +520,60 @@ class StartSubscriptionCsrfTests(_PlansMixin, APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(Subscription.objects.count(), 0)
         mock_sdk_class.assert_not_called()
+
+
+class SubscriptionChargeVsOfferingPurchaseTests(_PlansMixin, TestCase):
+    """Regression guard for the external_reference collision: a
+    subscription charge reaches the payments webhook as an ordinary
+    `type=payment` notification carrying the preapproval's
+    external_reference. With the "sub-<id>" format it must never touch an
+    OfferingPurchase — even one whose id equals the subscription's."""
+    def setUp(self):
+        from site_content.models import Offering
+        self._make_plans()
+        self.buyer = User.objects.create_user(username='compradora', email='c@example.com', password='x')
+        self.subscriber = User.objects.create_user(username='socia', email='s@example.com', password='x')
+        offering = Offering.objects.create(
+            name='Curso', price=Decimal('100.00'), currency='ARS', is_active=True,
+        )
+        self.purchase = OfferingPurchase.objects.create(
+            user=self.buyer, offering=offering, status=PurchaseStatus.PENDING,
+            amount=Decimal('100.00'), currency='ARS',
+        )
+        # Force the exact collision: same id, same amount/currency.
+        self.subscription = Subscription.objects.create(
+            id=self.purchase.id, user=self.subscriber, plan=self.monthly,
+            status=SubscriptionStatus.PENDING, amount=Decimal('100.00'), currency='ARS',
+        )
+
+    def _charge(self, reference):
+        return {
+            'id': 180061462863, 'status': 'approved', 'status_detail': 'accredited',
+            'transaction_amount': 100, 'currency_id': 'ARS', 'external_reference': reference,
+        }
+
+    def test_sub_prefixed_charge_leaves_colliding_purchase_untouched(self):
+        from payments.services import apply_payment_to_purchase
+        reference = subscription_external_reference(self.subscription)
+        self.assertEqual(reference, f'sub-{self.purchase.id}')
+
+        result = apply_payment_to_purchase(self._charge(reference))
+
+        self.assertEqual(result.reason, 'invalid_external_reference')
+        self.assertIsNone(result.purchase)
+        self.purchase.refresh_from_db()
+        self.assertEqual(self.purchase.status, PurchaseStatus.PENDING)
+        self.assertIsNone(self.purchase.mp_payment_id)
+        self.assertEqual(self.purchase.mp_status, '')
+        self.assertFalse(OfferingPurchase.objects.filter(status=PurchaseStatus.COMPLETED).exists())
+        self.subscription.refresh_from_db()
+        self.assertEqual(self.subscription.status, SubscriptionStatus.PENDING)
+
+    def test_bare_id_would_have_collided(self):
+        """Documents the bug the prefix prevents: the old bare-id format
+        completes an unrelated purchase."""
+        from payments.services import apply_payment_to_purchase
+        result = apply_payment_to_purchase(self._charge(str(self.subscription.id)))
+        self.assertEqual(result.reason, 'ok')
+        self.purchase.refresh_from_db()
+        self.assertEqual(self.purchase.status, PurchaseStatus.COMPLETED)

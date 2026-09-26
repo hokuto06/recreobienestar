@@ -117,6 +117,22 @@ def resolve_purchasable_plan(reference):
     return MembershipPlan.objects.filter(slug=reference, is_active=True).first()
 
 
+# Mercado Pago copies a preapproval's external_reference onto EVERY
+# recurring charge, and those charges also arrive at the payments webhook
+# as ordinary `type=payment` notifications. payments.services.
+# apply_payment_to_purchase reads external_reference as a bare
+# OfferingPurchase id (int(...)), so a bare Subscription id would be taken
+# for an unrelated purchase whenever the two independent id counters
+# collide. The "sub-" prefix makes int() fail there, which that function
+# already treats as invalid_external_reference: logged, nothing read or
+# changed. Format: "sub-<Subscription.id>", e.g. "sub-5".
+SUBSCRIPTION_EXTERNAL_REFERENCE_PREFIX = 'sub-'
+
+
+def subscription_external_reference(subscription):
+    return f'{SUBSCRIPTION_EXTERNAL_REFERENCE_PREFIX}{subscription.id}'
+
+
 # How long a PENDING signup's MP preapproval is reused instead of creating
 # another one — see StartSubscriptionView's DUPLICATE GUARD.
 PENDING_SIGNUP_REUSE_WINDOW = timedelta(hours=1)
@@ -236,8 +252,9 @@ class StartSubscriptionView(APIView):
             'reason': f'{plan.name} — Recreo Bienestar',
             # Carries our subscription id so 5B-2b's webhook can map MP's
             # notifications back to this exact row (mp_preapproval_id is
-            # the other anchor).
-            'external_reference': str(subscription.id),
+            # the other anchor). PREFIXED on purpose — see
+            # subscription_external_reference.
+            'external_reference': subscription_external_reference(subscription),
             'payer_email': request.user.email,
             # No free_trial here on purpose: the free trial is entirely
             # ours (Phase 5B-1) — MP bills from day one.
