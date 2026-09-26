@@ -16,7 +16,9 @@ from common.choices import SubscriptionStatus
 from memberships.models import (
     MembershipPlan, Subscription, SubscriptionCharge, SubscriptionChargeOutcome,
 )
-from memberships.services import _add_months, can_access_video, user_has_active_trial
+from memberships.services import (
+    RENEWAL_MARGIN, _add_months, can_access_video, paid_period_end, user_has_active_trial,
+)
 from payments.models import OfferingPurchase, PurchaseStatus
 from payments.tests.test_checkout import FakeMPResponse
 from payments.tests.test_webhook import WEBHOOK_SECRET, WEBHOOK_URL, _signature_header
@@ -175,7 +177,9 @@ class SubscriptionWebhookTests(_Fixtures, APITestCase):
         self.sub.refresh_from_db()
         self.assertEqual(self.sub.status, SubscriptionStatus.ACTIVE)
         self.assertTrue(before <= self.sub.starts_at <= after)
-        self.assertTrue(_add_months(before, 1) <= self.sub.ends_at <= _add_months(after, 1))
+        self.assertTrue(
+            _add_months(before, 1) + RENEWAL_MARGIN <= self.sub.ends_at <= _add_months(after, 1) + RENEWAL_MARGIN,
+        )
         self.assertIsNone(self.sub.grace_ends_at)
         self.assertEqual((self.sub.last_charge_payment_id, self.sub.last_charge_status), ('pay-1', 'approved'))
         trial.refresh_from_db()
@@ -194,7 +198,10 @@ class SubscriptionWebhookTests(_Fixtures, APITestCase):
         self._charge(mock_sdk, amount=300000, preapproval_id='pre-y')
         self.sub.refresh_from_db()
         self.assertEqual(self.sub.status, SubscriptionStatus.ACTIVE)
-        self.assertTrue(_add_months(before, 12) <= self.sub.ends_at <= _add_months(timezone.now(), 12))
+        self.assertTrue(
+            _add_months(before, 12) + RENEWAL_MARGIN
+            <= self.sub.ends_at <= _add_months(timezone.now(), 12) + RENEWAL_MARGIN,
+        )
 
     @patch(SUB_SDK)
     def test_same_charge_delivered_twice_is_applied_once(self, mock_sdk):
@@ -379,6 +386,33 @@ class SubscriptionWebhookTests(_Fixtures, APITestCase):
         self.assertEqual(self.sub.status, SubscriptionStatus.EXPIRED)
         self.assertFalse(self.sub.is_active())
         self.assertFalse(can_access_video(self.user, self.plan2_video))
+
+
+class PaidPeriodEndTests(_Fixtures, TestCase):
+    """The 2-day renewal margin is applied on top of the calendar period
+    for both cadences (and the fallback)."""
+    def setUp(self):
+        self._setup()
+        self.start = timezone.make_aware(timezone.datetime(2026, 1, 31, 12, 0))
+
+    def test_margin_is_two_days(self):
+        self.assertEqual(RENEWAL_MARGIN, timedelta(days=2))
+
+    def test_monthly_is_one_calendar_month_plus_margin(self):
+        self.assertEqual(
+            paid_period_end(self.monthly, self.start),
+            timezone.make_aware(timezone.datetime(2026, 2, 28, 12, 0)) + timedelta(days=2),
+        )
+
+    def test_yearly_is_twelve_calendar_months_plus_margin(self):
+        self.assertEqual(
+            paid_period_end(self.yearly, self.start),
+            timezone.make_aware(timezone.datetime(2027, 1, 31, 12, 0)) + timedelta(days=2),
+        )
+
+    def test_fallback_duration_also_gets_margin(self):
+        self.monthly.duration_days = 90
+        self.assertEqual(paid_period_end(self.monthly, self.start), self.start + timedelta(days=92))
 
 
 class CancelSubscriptionTests(_Fixtures, APITestCase):

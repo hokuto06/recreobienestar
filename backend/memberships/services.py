@@ -297,10 +297,19 @@ def _add_months(moment, months):
     return moment.replace(year=year, month=month, day=day)
 
 
+# Slack added to every paid period: MP bills the next charge at roughly
+# the moment the current period ends, so without it a renewal charge — or
+# its notification — arriving even a few hours late would briefly revoke
+# access from a member who is paying. The next confirmed charge resets
+# ends_at from its own timestamp, so the margin never accumulates.
+RENEWAL_MARGIN = timedelta(days=2)
+
+
 def paid_period_end(plan, start):
     """Phase 5B-2b: when a confirmed charge's paid period ends — the same
     cadence the preapproval bills on (billing_cadence_for_plan): 30 days
-    -> start + 1 calendar month, 365 days -> start + 12 calendar months.
+    -> start + 1 calendar month, 365 days -> start + 12 calendar months,
+    plus RENEWAL_MARGIN (2 days) in every case.
     Fallback for a plan whose duration_days no longer maps to a cadence
     (edited after signup): start + duration_days, or 30 days if unset —
     MP already took the money, so access must still be granted."""
@@ -308,6 +317,9 @@ def paid_period_end(plan, start):
     if cadence is not None:
         frequency, frequency_type = cadence
         if frequency_type == 'months':
-            return _add_months(start, frequency)
-        return start + timedelta(days=frequency)
-    return start + timedelta(days=plan.duration_days or 30)
+            period_end = _add_months(start, frequency)
+        else:
+            period_end = start + timedelta(days=frequency)
+    else:
+        period_end = start + timedelta(days=plan.duration_days or 30)
+    return period_end + RENEWAL_MARGIN
