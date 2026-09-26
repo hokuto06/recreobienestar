@@ -18,6 +18,9 @@ catalog/views.py:VideoViewSet does the same for the API. A single
 video_detail check doesn't need this — one video means one query either
 way.
 """
+from django.db import transaction
+from django.utils import timezone
+
 from common.choices import SubscriptionStatus, VideoAccessLevel
 from payments.models import OfferingPurchase, PurchaseStatus
 
@@ -256,3 +259,27 @@ def billing_cadence_for_plan(plan):
     """(frequency, frequency_type) for `plan`'s MP preapproval, or None if
     its duration_days doesn't map to a known cadence."""
     return _BILLING_CADENCE_BY_DURATION_DAYS.get(plan.duration_days)
+
+
+def supersede_active_trial(user, paid_subscription, at=None):
+    """Phase 5B-2a (for 5B-2b to call): ends `user`'s currently-active
+    free trial, if any, because `paid_subscription` has just been
+    CONFIRMED by Mercado Pago. Deliberately NOT called at signup
+    (StartSubscriptionView) — a member who abandons MP's page must keep
+    their trial. Not wired to anything yet.
+
+    Locks the user's trial rows (select_for_update) so a concurrent
+    duplicate confirmation can't double-apply. Only a trial that's still
+    active at `at` is touched; an already-expired or already-superseded
+    one is left alone, so calling this twice is a no-op the second time.
+    Returns the superseded trial Subscription, or None.
+    """
+    moment = at or timezone.now()
+    with transaction.atomic():
+        trials = user.subscriptions.select_for_update().select_related('plan').filter(is_trial=True)
+        for trial in trials:
+            if trial.superseded_by_id is None and trial.is_active(at=moment):
+                trial.supersede_trial(paid_subscription, at=moment)
+                trial.save(update_fields=['ends_at', 'superseded_by', 'updated_at'])
+                return trial
+    return None

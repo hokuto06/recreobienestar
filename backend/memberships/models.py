@@ -149,6 +149,10 @@ class Subscription(TimeStampedModel):
     # de suscripciones (5B-2b).
     mp_preapproval_id = models.CharField(max_length=100, blank=True, default='', db_index=True)
     mp_payer_id = models.CharField(max_length=100, blank=True, default='')
+    # La URL de autorización de MP para este preapproval — guardada para
+    # que un doble clic/refresh reutilice el mismo en vez de crear otro
+    # (ver StartSubscriptionView, DUPLICATE GUARD).
+    mp_init_point = models.URLField(max_length=500, blank=True, default='')
     # El vocabulario crudo de MP (pending/authorized/paused/cancelled),
     # separado de `status` por la misma razón que OfferingPurchase.mp_status:
     # el acceso solo lee `status`, nunca este campo.
@@ -161,9 +165,10 @@ class Subscription(TimeStampedModel):
     # precio nuevo (mismo criterio que OfferingPurchase.amount/currency).
     amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     currency = models.CharField(max_length=3, blank=True, default='')
-    # Una prueba gratuita terminada antes de tiempo porque la persona se
-    # suscribió a un plan pago: apunta a esa suscripción paga. Solo lo
-    # setea StartSubscriptionView, y solo si el preapproval se creó bien.
+    # Una prueba gratuita terminada antes de tiempo porque se confirmó el
+    # pago de un plan pago: apunta a esa suscripción paga. Lo setea
+    # memberships.services.supersede_active_trial (desde 5B-2b, al
+    # confirmar MP el cobro) — nunca el alta en sí.
     superseded_by = models.ForeignKey(
         'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='superseded_trials',
         help_text='Suscripción paga que reemplazó a esta prueba gratuita.',
@@ -267,7 +272,8 @@ class Subscription(TimeStampedModel):
 
     def supersede_trial(self, paid_subscription, at=None):
         """Phase 5B-2a: ends this (trial) subscription's access right now
-        because the member subscribed to a paid plan. Sets ends_at to the
+        because the member's paid plan was confirmed by Mercado Pago (see
+        memberships.services.supersede_active_trial, the only caller). Sets ends_at to the
         moment of supersession — is_active() turns False immediately via
         the normal expiry check — and records which paid subscription
         replaced it. status/is_trial/trial_ends_at are left as they were,

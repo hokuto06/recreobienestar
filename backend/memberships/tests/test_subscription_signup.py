@@ -16,8 +16,9 @@ from catalog.models import Category, Video
 from common.choices import ENTITLED_STATUSES, SubscriptionStatus
 from memberships.models import MembershipPlan, Subscription
 from memberships.services import (
-    billing_cadence_for_plan, can_access_video, user_has_active_trial,
+    billing_cadence_for_plan, can_access_video, supersede_active_trial, user_has_active_trial,
 )
+from memberships.views import PENDING_SIGNUP_REUSE_WINDOW
 from payments.tests.test_checkout import FakeMPResponse
 
 User = get_user_model()
@@ -101,6 +102,7 @@ class StartSubscriptionViewTests(_PlansMixin, APITestCase):
         self.assertFalse(sub.is_trial)
         self.assertEqual(sub.mp_preapproval_id, 'pre-123')
         self.assertEqual(sub.mp_status, 'pending')
+        self.assertEqual(sub.mp_init_point, resp.data['init_point'])
         self.assertEqual(sub.amount, Decimal('55000.00'))
         self.assertEqual(sub.currency, 'ARS')
 
@@ -278,24 +280,22 @@ class StartSubscriptionViewTests(_PlansMixin, APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_502_BAD_GATEWAY)
         self.assertEqual(Subscription.objects.get(user=self.user).status, SubscriptionStatus.EXPIRED)
 
-    # ── trial termination ──────────────────────────────────────────────
+    # ── trial is NOT touched at signup ─────────────────────────────────
     @patch(SDK_PATH)
-    def test_successful_signup_ends_active_trial(self, mock_sdk_class):
+    def test_successful_signup_leaves_active_trial_untouched(self, mock_sdk_class):
         trial = self._start_trial()
+        original_ends_at = trial.ends_at
         mock_sdk_class.return_value.preapproval.return_value.create.return_value = _ok_preapproval()
         self.client.force_login(self.user)
-        self.assertTrue(user_has_active_trial(self.user))
 
         resp = self._post({'plan': self.monthly.slug})
 
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
-        paid = Subscription.objects.get(user=self.user, is_trial=False)
         trial.refresh_from_db()
-        self.assertEqual(trial.superseded_by, paid)
-        self.assertLessEqual(trial.ends_at, timezone.now())
-        self.assertFalse(trial.is_active())
-        self.assertTrue(trial.is_trial)
-        self.assertFalse(user_has_active_trial(self.user))
+        self.assertEqual(trial.ends_at, original_ends_at)
+        self.assertIsNone(trial.superseded_by)
+        self.assertTrue(trial.is_active())
+        self.assertTrue(user_has_active_trial(self.user))
 
     @patch(SDK_PATH)
     def test_trial_user_is_not_blocked_as_already_subscribed(self, mock_sdk_class):
@@ -304,14 +304,119 @@ class StartSubscriptionViewTests(_PlansMixin, APITestCase):
         self.client.force_login(self.user)
         self.assertEqual(self._post({'plan': self.yearly.slug}).status_code, status.HTTP_201_CREATED)
 
+    # ── duplicate-preapproval guard ────────────────────────────────────
     @patch(SDK_PATH)
-    def test_signup_does_not_touch_other_users_trials(self, mock_sdk_class):
-        other = User.objects.create_user(username='otra', email='otra@example.com', password='x')
-        other_trial = self._start_trial(user=other)
-        mock_sdk_class.return_value.preapproval.return_value.create.return_value = _ok_preapproval()
+    def test_repeat_signup_within_window_reuses_existing_preapproval(self, mock_sdk_class):
+        create = mock_sdk_class.return_value.preapproval.return_value.create
+        create.return_value = _ok_preapproval()
         self.client.force_login(self.user)
 
+        first = self._post({'plan': self.monthly.slug})
+        second = self._post({'plan': self.monthly.slug})
+
+        self.assertEqual(first.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(second.status_code, status.HTTP_200_OK)
+        self.assertEqual(second.data['init_point'], first.data['init_point'])
+        self.assertEqual(second.data['preapproval_id'], 'pre-123')
+        self.assertEqual(create.call_count, 1)
+        self.assertEqual(Subscription.objects.filter(user=self.user).count(), 1)
+
+    @patch(SDK_PATH)
+    def test_pending_signup_older_than_window_is_not_reused(self, mock_sdk_class):
+        create = mock_sdk_class.return_value.preapproval.return_value.create
+        create.return_value = _ok_preapproval()
+        self.client.force_login(self.user)
         self._post({'plan': self.monthly.slug})
+        Subscription.objects.filter(user=self.user).update(
+            created_at=timezone.now() - PENDING_SIGNUP_REUSE_WINDOW - timedelta(minutes=1),
+        )
+        create.return_value = _ok_preapproval(id='pre-456')
+
+        resp = self._post({'plan': self.monthly.slug})
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(resp.data['preapproval_id'], 'pre-456')
+        self.assertEqual(create.call_count, 2)
+
+    @patch(SDK_PATH)
+    def test_pending_signup_for_other_plan_or_old_price_is_not_reused(self, mock_sdk_class):
+        create = mock_sdk_class.return_value.preapproval.return_value.create
+        create.return_value = _ok_preapproval()
+        self.client.force_login(self.user)
+        self._post({'plan': self.monthly.slug})
+
+        create.return_value = _ok_preapproval(id='pre-yearly')
+        self.assertEqual(self._post({'plan': self.yearly.slug}).status_code, status.HTTP_201_CREATED)
+
+        self.monthly.price = Decimal('60000.00')
+        self.monthly.save()
+        create.return_value = _ok_preapproval(id='pre-new-price')
+        resp = self._post({'plan': self.monthly.slug})
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(resp.data['preapproval_id'], 'pre-new-price')
+        self.assertEqual(create.call_count, 3)
+
+
+class SupersedeActiveTrialTests(_PlansMixin, TestCase):
+    """memberships.services.supersede_active_trial — unwired in 5B-2a;
+    5B-2b calls it once MP confirms the paid subscription's charge."""
+    def setUp(self):
+        self._make_plans()
+        self.user = User.objects.create_user(
+            username='socia', email='socia@example.com', password='x',
+        )
+        now = timezone.now()
+        self.trial = Subscription.objects.create(
+            user=self.user, plan=self.trial_plan, status=SubscriptionStatus.TRIAL,
+            starts_at=now, ends_at=now + timedelta(days=7), trial_ends_at=now + timedelta(days=7),
+            is_trial=True,
+        )
+        self.paid = Subscription.objects.create(
+            user=self.user, plan=self.monthly, status=SubscriptionStatus.PENDING,
+            amount=self.monthly.price, currency='ARS', mp_preapproval_id='pre-123',
+        )
+
+    def test_supersedes_active_trial(self):
+        original_trial_ends_at = self.trial.trial_ends_at
+        result = supersede_active_trial(self.user, self.paid)
+
+        self.assertEqual(result, self.trial)
+        self.trial.refresh_from_db()
+        self.assertEqual(self.trial.superseded_by, self.paid)
+        self.assertLessEqual(self.trial.ends_at, timezone.now())
+        self.assertFalse(self.trial.is_active())
+        self.assertTrue(self.trial.is_trial)
+        self.assertEqual(self.trial.status, SubscriptionStatus.TRIAL)
+        self.assertEqual(self.trial.trial_ends_at, original_trial_ends_at)
+        self.assertFalse(user_has_active_trial(self.user))
+
+    def test_second_call_is_a_noop(self):
+        supersede_active_trial(self.user, self.paid)
+        self.trial.refresh_from_db()
+        first_ends_at = self.trial.ends_at
+
+        self.assertIsNone(supersede_active_trial(self.user, self.paid))
+        self.trial.refresh_from_db()
+        self.assertEqual(self.trial.ends_at, first_ends_at)
+
+    def test_expired_trial_is_left_alone(self):
+        past = timezone.now() - timedelta(days=1)
+        Subscription.objects.filter(pk=self.trial.pk).update(ends_at=past)
+
+        self.assertIsNone(supersede_active_trial(self.user, self.paid))
+        self.trial.refresh_from_db()
+        self.assertEqual(self.trial.ends_at, past)
+        self.assertIsNone(self.trial.superseded_by)
+
+    def test_other_users_trial_is_not_touched(self):
+        other = User.objects.create_user(username='otra', email='otra@example.com', password='x')
+        now = timezone.now()
+        other_trial = Subscription.objects.create(
+            user=other, plan=self.trial_plan, status=SubscriptionStatus.TRIAL,
+            starts_at=now, ends_at=now + timedelta(days=7), is_trial=True,
+        )
+
+        supersede_active_trial(self.user, self.paid)
 
         other_trial.refresh_from_db()
         self.assertIsNone(other_trial.superseded_by)
@@ -337,6 +442,17 @@ class MembresiaPagesTests(_PlansMixin, TestCase):
         self.assertContains(resp, 'data-subscribe-form')
         self.assertContains(resp, 'por año')
         self.assertContains(resp, 'csrfmiddlewaretoken')
+
+    def test_trial_user_warned_trial_ends_on_payment_confirmation(self):
+        now = timezone.now()
+        Subscription.objects.create(
+            user=self.user, plan=self.trial_plan, status=SubscriptionStatus.TRIAL,
+            starts_at=now, ends_at=now + timedelta(days=7), is_trial=True,
+        )
+        self.client.force_login(self.user)
+        resp = self.client.get(f'/membresia/{self.monthly.slug}/')
+        self.assertContains(resp, 'data-subscribe-form')
+        self.assertContains(resp, 'hasta que Mercado Pago confirme el pago')
 
     def test_subscribed_user_sees_message_not_button(self):
         Subscription.objects.create(

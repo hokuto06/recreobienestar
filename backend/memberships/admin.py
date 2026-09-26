@@ -61,7 +61,7 @@ class SubscriptionAdmin(admin.ModelAdmin):
     autocomplete_fields = ('user', 'plan')
     readonly_fields = (
         'created_at', 'updated_at',
-        'mp_preapproval_id', 'mp_payer_id', 'mp_status', 'next_payment_date',
+        'mp_preapproval_id', 'mp_init_point', 'mp_payer_id', 'mp_status', 'next_payment_date',
         'last_charge_payment_id', 'last_charge_status', 'amount', 'currency', 'superseded_by',
     )
     date_hierarchy = 'starts_at'
@@ -78,7 +78,7 @@ class SubscriptionAdmin(admin.ModelAdmin):
         # Fase 5B-2a: solo lectura — los completa el alta vía Mercado Pago
         # (y, desde 5B-2b, el webhook de suscripciones), nunca a mano.
         ('Mercado Pago (Fase 5B-2a)', {'fields': (
-            'mp_preapproval_id', 'mp_status', 'mp_payer_id', 'amount', 'currency',
+            'mp_preapproval_id', 'mp_init_point', 'mp_status', 'mp_payer_id', 'amount', 'currency',
             'next_payment_date', 'last_charge_payment_id', 'last_charge_status', 'superseded_by',
         ), 'classes': ('collapse',)}),
         ('Fechas', {'fields': ('created_at', 'updated_at'), 'classes': ('collapse',)}),

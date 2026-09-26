@@ -117,6 +117,27 @@ def resolve_purchasable_plan(reference):
     return MembershipPlan.objects.filter(slug=reference, is_active=True).first()
 
 
+# How long a PENDING signup's MP preapproval is reused instead of creating
+# another one — see StartSubscriptionView's DUPLICATE GUARD.
+PENDING_SIGNUP_REUSE_WINDOW = timedelta(hours=1)
+
+
+def _recent_pending_signup(user, plan):
+    """The user's most recent PENDING subscription to `plan` that already
+    has an MP preapproval + init_point, was created within
+    PENDING_SIGNUP_REUSE_WINDOW, and was quoted at the plan's CURRENT
+    price/currency — or None."""
+    return (
+        Subscription.objects.filter(
+            user=user, plan=plan, status=SubscriptionStatus.PENDING, is_trial=False,
+            amount=plan.price, currency=plan.currency,
+            created_at__gte=timezone.now() - PENDING_SIGNUP_REUSE_WINDOW,
+        )
+        .exclude(mp_preapproval_id='').exclude(mp_init_point='')
+        .order_by('-created_at').first()
+    )
+
+
 class StartSubscriptionView(APIView):
     """POST /api/subscribe/ — starts a paid-plan signup (Phase 5B-2a):
     creates a Mercado Pago preapproval (recurring charge authorization)
@@ -139,9 +160,18 @@ class StartSubscriptionView(APIView):
     email (400 — MP requires payer_email), and a user who already has an
     active paid subscription (409 — no plan switching in this phase).
 
-    TRIAL TERMINATION: if the user has an active free trial, it is ended
-    (Subscription.supersede_trial) — but ONLY after MP accepted the
-    preapproval. A failed signup leaves the trial exactly as it was.
+    AN ACTIVE FREE TRIAL IS NOT TOUCHED HERE. Signing up only means the
+    member was sent to MP — they may still abandon MP's page. The trial
+    ends when MP confirms the first charge: 5B-2b's confirmation path
+    calls memberships.services.supersede_active_trial() at that point.
+
+    DUPLICATE GUARD: if the user already has a PENDING subscription for
+    the same plan, at the same price/currency, with an MP preapproval,
+    created within PENDING_SIGNUP_REUSE_WINDOW (1 hour), its stored
+    init_point is returned instead of minting a second recurring-charge
+    authorization at MP (double-click, refresh, back button). Anything
+    older, or on a different price, gets a fresh preapproval. This is
+    not a cleanup mechanism for stale PENDING rows — that's 5B-2b's.
 
     ON MP FAILURE: the PENDING row is marked EXPIRED with ends_at=now
     rather than deleted (keeps an audit trail of the attempt, same as
@@ -189,6 +219,13 @@ class StartSubscriptionView(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
 
+        reusable = _recent_pending_signup(request.user, plan)
+        if reusable is not None:
+            return Response(
+                {'init_point': reusable.mp_init_point, 'preapproval_id': reusable.mp_preapproval_id},
+                status=status.HTTP_200_OK,
+            )
+
         subscription = Subscription.objects.create(
             user=request.user, plan=plan, status=SubscriptionStatus.PENDING,
             starts_at=timezone.now(), amount=plan.price, currency=plan.currency,
@@ -233,19 +270,12 @@ class StartSubscriptionView(APIView):
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
-        now = timezone.now()
-        with transaction.atomic():
-            subscription.mp_preapproval_id = str(preapproval['id'])
-            subscription.mp_status = preapproval.get('status', '') or ''
-            subscription.save(update_fields=['mp_preapproval_id', 'mp_status', 'updated_at'])
-
-            trials = Subscription.objects.select_for_update().select_related('plan').filter(
-                user=request.user, is_trial=True,
-            )
-            for trial in trials:
-                if trial.is_active(at=now):
-                    trial.supersede_trial(subscription, at=now)
-                    trial.save(update_fields=['ends_at', 'superseded_by', 'updated_at'])
+        subscription.mp_preapproval_id = str(preapproval['id'])
+        subscription.mp_status = preapproval.get('status', '') or ''
+        subscription.mp_init_point = preapproval['init_point']
+        subscription.save(update_fields=[
+            'mp_preapproval_id', 'mp_status', 'mp_init_point', 'updated_at',
+        ])
 
         return Response(
             {'init_point': preapproval['init_point'], 'preapproval_id': subscription.mp_preapproval_id},
