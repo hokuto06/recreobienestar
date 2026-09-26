@@ -18,6 +18,12 @@ catalog/views.py:VideoViewSet does the same for the API. A single
 video_detail check doesn't need this — one video means one query either
 way.
 """
+import calendar
+from datetime import timedelta
+
+from django.db import transaction
+from django.utils import timezone
+
 from common.choices import SubscriptionStatus, VideoAccessLevel
 from payments.models import OfferingPurchase, PurchaseStatus
 
@@ -210,3 +216,110 @@ def can_access_video(user, video, at=None, subscriptions=None, purchases=None):
         return True
 
     return user_has_purchased_offering_unlocking(user, video, purchases=purchases)
+
+
+def user_has_active_paid_subscription(user, at=None, subscriptions=None):
+    """Phase 5B-2a: True if `user` has a currently-active (is_active())
+    subscription that is NOT the free trial — i.e. something they pay
+    for (or that Carla granted by hand). Used only to block a second
+    paid signup (no plan switching yet — see StartSubscriptionView).
+
+    Deliberately NOT user_has_any_active_paid_plan: that one counts ANY
+    active subscription on an active plan, including a TRIAL-status one,
+    so it would wrongly block exactly the "trial member subscribes"
+    path this phase exists for. A still-PENDING paid signup doesn't count
+    either (is_active() is False for PENDING — not in ENTITLED_STATUSES).
+    """
+    if user is None or not getattr(user, 'is_authenticated', False):
+        return False
+    candidates = (
+        subscriptions if subscriptions is not None
+        else user.subscriptions.select_related('plan').all()
+    )
+    return any(
+        not subscription.is_trial
+        and subscription.status != SubscriptionStatus.TRIAL
+        and subscription.is_active(at=at)
+        for subscription in candidates
+    )
+
+
+# Phase 5B-2a: Mercado Pago preapproval billing cadence, derived from
+# MembershipPlan.duration_days. MP's auto_recurring only accepts
+# frequency_type 'days' or 'months' (no 'years'), so yearly is 12 months.
+# Deliberately an explicit whitelist rather than arithmetic on
+# duration_days: a plan with any other value (unset, 31, 90, ...) is not
+# billable through this flow until someone decides what cadence it means
+# — billing_cadence_for_plan() returns None and the signup is refused,
+# never guessed.
+_BILLING_CADENCE_BY_DURATION_DAYS = {
+    30: (1, 'months'),
+    365: (12, 'months'),
+}
+
+
+def billing_cadence_for_plan(plan):
+    """(frequency, frequency_type) for `plan`'s MP preapproval, or None if
+    its duration_days doesn't map to a known cadence."""
+    return _BILLING_CADENCE_BY_DURATION_DAYS.get(plan.duration_days)
+
+
+def supersede_active_trial(user, paid_subscription, at=None):
+    """Phase 5B-2a (for 5B-2b to call): ends `user`'s currently-active
+    free trial, if any, because `paid_subscription` has just been
+    CONFIRMED by Mercado Pago. Deliberately NOT called at signup
+    (StartSubscriptionView) — a member who abandons MP's page must keep
+    their trial. Not wired to anything yet.
+
+    Locks the user's trial rows (select_for_update) so a concurrent
+    duplicate confirmation can't double-apply. Only a trial that's still
+    active at `at` is touched; an already-expired or already-superseded
+    one is left alone, so calling this twice is a no-op the second time.
+    Returns the superseded trial Subscription, or None.
+    """
+    moment = at or timezone.now()
+    with transaction.atomic():
+        trials = user.subscriptions.select_for_update().select_related('plan').filter(is_trial=True)
+        for trial in trials:
+            if trial.superseded_by_id is None and trial.is_active(at=moment):
+                trial.supersede_trial(paid_subscription, at=moment)
+                trial.save(update_fields=['ends_at', 'superseded_by', 'updated_at'])
+                return trial
+    return None
+
+
+def _add_months(moment, months):
+    """`moment` + `months` calendar months, clamping the day to the target
+    month's length (Jan 31 + 1 month = Feb 28/29), time and tzinfo kept."""
+    month_index = moment.month - 1 + months
+    year, month = moment.year + month_index // 12, month_index % 12 + 1
+    day = min(moment.day, calendar.monthrange(year, month)[1])
+    return moment.replace(year=year, month=month, day=day)
+
+
+# Slack added to every paid period: MP bills the next charge at roughly
+# the moment the current period ends, so without it a renewal charge — or
+# its notification — arriving even a few hours late would briefly revoke
+# access from a member who is paying. The next confirmed charge resets
+# ends_at from its own timestamp, so the margin never accumulates.
+RENEWAL_MARGIN = timedelta(days=2)
+
+
+def paid_period_end(plan, start):
+    """Phase 5B-2b: when a confirmed charge's paid period ends — the same
+    cadence the preapproval bills on (billing_cadence_for_plan): 30 days
+    -> start + 1 calendar month, 365 days -> start + 12 calendar months,
+    plus RENEWAL_MARGIN (2 days) in every case.
+    Fallback for a plan whose duration_days no longer maps to a cadence
+    (edited after signup): start + duration_days, or 30 days if unset —
+    MP already took the money, so access must still be granted."""
+    cadence = billing_cadence_for_plan(plan)
+    if cadence is not None:
+        frequency, frequency_type = cadence
+        if frequency_type == 'months':
+            period_end = _add_months(start, frequency)
+        else:
+            period_end = start + timedelta(days=frequency)
+    else:
+        period_end = start + timedelta(days=plan.duration_days or 30)
+    return period_end + RENEWAL_MARGIN

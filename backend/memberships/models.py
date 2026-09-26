@@ -141,6 +141,39 @@ class Subscription(TimeStampedModel):
         ),
     )
 
+    # ── Phase 5B-2a: suscripción paga vía Mercado Pago (preapproval) ──────
+    # Todos opcionales/en blanco: las suscripciones creadas a mano o por la
+    # prueba gratuita no los usan. Los completa memberships.views.
+    # StartSubscriptionView al crear el preapproval; mp_payer_id,
+    # mp_status, next_payment_date y last_charge_* quedan para el webhook
+    # de suscripciones (5B-2b).
+    mp_preapproval_id = models.CharField(max_length=100, blank=True, default='', db_index=True)
+    mp_payer_id = models.CharField(max_length=100, blank=True, default='')
+    # La URL de autorización de MP para este preapproval — guardada para
+    # que un doble clic/refresh reutilice el mismo en vez de crear otro
+    # (ver StartSubscriptionView, DUPLICATE GUARD).
+    mp_init_point = models.URLField(max_length=500, blank=True, default='')
+    # El vocabulario crudo de MP (pending/authorized/paused/cancelled),
+    # separado de `status` por la misma razón que OfferingPurchase.mp_status:
+    # el acceso solo lee `status`, nunca este campo.
+    mp_status = models.CharField(max_length=30, blank=True, default='')
+    next_payment_date = models.DateTimeField(null=True, blank=True)
+    last_charge_payment_id = models.CharField(max_length=100, blank=True, default='')
+    last_charge_status = models.CharField(max_length=30, blank=True, default='')
+    # Foto del precio al momento del alta — plan.price puede cambiar
+    # después, y una suscripción histórica no debe reinterpretarse con el
+    # precio nuevo (mismo criterio que OfferingPurchase.amount/currency).
+    amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    currency = models.CharField(max_length=3, blank=True, default='')
+    # Una prueba gratuita terminada antes de tiempo porque se confirmó el
+    # pago de un plan pago: apunta a esa suscripción paga. Lo setea
+    # memberships.services.supersede_active_trial (desde 5B-2b, al
+    # confirmar MP el cobro) — nunca el alta en sí.
+    superseded_by = models.ForeignKey(
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='superseded_trials',
+        help_text='Suscripción paga que reemplazó a esta prueba gratuita.',
+    )
+
     class Meta:
         ordering = ['-created_at']
         verbose_name = 'Suscripción'
@@ -236,3 +269,56 @@ class Subscription(TimeStampedModel):
         start_grace(), for once a retried charge succeeds. Does NOT call
         save() (see start_grace). Not called from anywhere yet."""
         self.grace_ends_at = None
+
+    def supersede_trial(self, paid_subscription, at=None):
+        """Phase 5B-2a: ends this (trial) subscription's access right now
+        because the member's paid plan was confirmed by Mercado Pago (see
+        memberships.services.supersede_active_trial, the only caller). Sets ends_at to the
+        moment of supersession — is_active() turns False immediately via
+        the normal expiry check — and records which paid subscription
+        replaced it. status/is_trial/trial_ends_at are left as they were,
+        so the row still reads as "the one free trial this user had" (the
+        one-trial-per-user constraint keys off is_trial). Does NOT call
+        save() (see start_grace)."""
+        self.ends_at = at or timezone.now()
+        self.superseded_by = paid_subscription
+
+
+class SubscriptionChargeOutcome(models.TextChoices):
+    ACTIVATED = 'activated', 'Cobro aprobado — acceso extendido'
+    AMOUNT_MISMATCH = 'amount_mismatch', 'Monto/moneda no coincide — revisar a mano'
+    GRACE_STARTED = 'grace_started', 'Cobro fallido — período de gracia iniciado'
+    GRACE_RUNNING = 'grace_running', 'Cobro fallido — gracia ya en curso'
+    PAST_DUE = 'past_due', 'Cobro fallido — gracia vencida, sin acceso'
+    FIRST_CHARGE_FAILED = 'first_charge_failed', 'Primer cobro fallido — nunca activada'
+    PENDING_CHARGE = 'pending_charge', 'Cobro en proceso'
+    IGNORED = 'ignored', 'Sin efecto (suscripción no activa)'
+
+
+class SubscriptionCharge(TimeStampedModel):
+    """Phase 5B-2b: one row per Mercado Pago payment attempt on a
+    subscription's recurring charge (a `subscription_authorized_payment`
+    notification). It is the idempotency ledger for the subscription
+    webhook: mp_payment_id is UNIQUE, and a notification for a payment
+    already recorded with the same MP status — or already APPROVED and
+    applied — is a no-op. That is what stops MP's duplicate/retried
+    notifications from extending ends_at twice for one charge. Also the
+    audit trail Carla sees in the admin. Only ever written by
+    memberships.webhooks, never by hand."""
+    subscription = models.ForeignKey(
+        Subscription, on_delete=models.PROTECT, related_name='charges',
+    )
+    mp_authorized_payment_id = models.CharField(max_length=100, db_index=True)
+    mp_payment_id = models.CharField(max_length=100, unique=True)
+    mp_payment_status = models.CharField(max_length=30, blank=True, default='')
+    amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    currency = models.CharField(max_length=3, blank=True, default='')
+    outcome = models.CharField(max_length=30, choices=SubscriptionChargeOutcome.choices)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Cobro de suscripción'
+        verbose_name_plural = 'Cobros de suscripción'
+
+    def __str__(self):
+        return f'{self.subscription_id} — pago {self.mp_payment_id} ({self.mp_payment_status})'

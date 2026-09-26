@@ -2,7 +2,7 @@ from django.contrib import admin, messages
 from django.utils import timezone
 from django.utils.html import format_html
 
-from .models import MembershipPlan, Subscription
+from .models import MembershipPlan, Subscription, SubscriptionCharge
 
 
 @admin.register(MembershipPlan)
@@ -59,7 +59,11 @@ class SubscriptionAdmin(admin.ModelAdmin):
     list_filter = ('status', 'plan')
     search_fields = ('user__username', 'user__email', 'plan__name')
     autocomplete_fields = ('user', 'plan')
-    readonly_fields = ('created_at', 'updated_at')
+    readonly_fields = (
+        'created_at', 'updated_at',
+        'mp_preapproval_id', 'mp_init_point', 'mp_payer_id', 'mp_status', 'next_payment_date',
+        'last_charge_payment_id', 'last_charge_status', 'amount', 'currency', 'superseded_by',
+    )
     date_hierarchy = 'starts_at'
 
     fieldsets = (
@@ -71,6 +75,12 @@ class SubscriptionAdmin(admin.ModelAdmin):
         # tiene efecto (Fase 5A), pero ya es editable a mano acá para
         # probar el flujo sin depender de Mercado Pago, igual que 4A.
         ('Suscripción recurrente (Fase 5A)', {'fields': ('trial_ends_at', 'grace_ends_at')}),
+        # Fase 5B-2a: solo lectura — los completa el alta vía Mercado Pago
+        # (y, desde 5B-2b, el webhook de suscripciones), nunca a mano.
+        ('Mercado Pago (Fase 5B-2a)', {'fields': (
+            'mp_preapproval_id', 'mp_init_point', 'mp_status', 'mp_payer_id', 'amount', 'currency',
+            'next_payment_date', 'last_charge_payment_id', 'last_charge_status', 'superseded_by',
+        ), 'classes': ('collapse',)}),
         ('Fechas', {'fields': ('created_at', 'updated_at'), 'classes': ('collapse',)}),
     )
 
@@ -101,3 +111,24 @@ class SubscriptionAdmin(admin.ModelAdmin):
             'Revisá ends_at si corresponde extender la vigencia.',
             messages.SUCCESS,
         )
+
+
+@admin.register(SubscriptionCharge)
+class SubscriptionChargeAdmin(admin.ModelAdmin):
+    """Fase 5B-2b: registro de cobros recurrentes de Mercado Pago — solo
+    lectura. Lo escribe únicamente el webhook de suscripciones."""
+    list_display = (
+        'subscription', 'mp_payment_id', 'mp_payment_status', 'amount', 'currency',
+        'outcome', 'created_at',
+    )
+    list_filter = ('outcome', 'mp_payment_status')
+    search_fields = ('mp_payment_id', 'mp_authorized_payment_id', 'subscription__user__email')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

@@ -163,9 +163,11 @@
         // registra una cuenta nueva, inicia la prueba de la cuenta ya
         // logueada. Se ignora cta_label acá a propósito: ese campo es
         // para el texto de "sumarse a un plan pago", que ya no aplica a
-        // este botón. Mensual/Anual siguen exactamente igual que antes.
+        // este botón.
+        // Fase 5B-2a: Mensual/Anual llevan a su página de suscripción
+        // (/membresia/<slug>/, login requerido) en vez de /registro/.
         var isTrialPlan = plan.tier === 'plan1';
-        var ctaHref = isTrialPlan ? '/prueba-gratis/' : '/registro/';
+        var ctaHref = isTrialPlan ? '/prueba-gratis/' : '/membresia/' + esc(plan.slug) + '/';
         var ctaLabel = isTrialPlan ? 'Empezar prueba' : (plan.cta_label || 'Sumarme');
         return (
           '<div class="card plan-card' + (variantClass ? ' ' + variantClass : '') + '">' +

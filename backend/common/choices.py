@@ -35,6 +35,11 @@ class SubscriptionStatus(models.TextChoices):
     PAST_DUE = 'past_due', 'Pago vencido'
     CANCELLED = 'cancelled', 'Cancelada'
     EXPIRED = 'expired', 'Expirada'
+    # Phase 5B-2a: a paid-plan signup whose Mercado Pago preapproval was
+    # created but not yet confirmed by MP. Deliberately NOT in
+    # ENTITLED_STATUSES below — a PENDING subscription grants no access
+    # at all; only 5B-2b's confirmation (webhook) moves it to ACTIVE.
+    PENDING = 'pending', 'Pendiente de pago'
 
 
 # Statuses that represent "currently entitled" states BEFORE the expiry
