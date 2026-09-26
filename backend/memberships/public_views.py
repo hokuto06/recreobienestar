@@ -102,3 +102,24 @@ def membresia_estado(request):
         'subscription': subscription,
         'is_active': subscription is not None and subscription.is_active(),
     })
+
+
+@login_required
+def mi_suscripcion(request):
+    """GET /mi-cuenta/suscripcion/ — the member's paid subscription (the
+    most recent one that went through Mercado Pago): status, until when
+    they have access, next charge, and a "Cancelar suscripción" button
+    that POSTs to /api/subscription/cancel/ (memberships.views.
+    CancelSubscriptionView) via site.js. Only ever shows the member's
+    OWN subscription."""
+    from .views import CANCELLABLE_STATUSES
+
+    subscription = (
+        Subscription.objects.filter(user=request.user, is_trial=False)
+        .exclude(mp_preapproval_id='').select_related('plan').order_by('-created_at').first()
+    )
+    return render(request, 'memberships/mi_suscripcion.html', {
+        'subscription': subscription,
+        'is_active': subscription is not None and subscription.is_active(),
+        'cancellable': subscription is not None and subscription.status in CANCELLABLE_STATUSES,
+    })

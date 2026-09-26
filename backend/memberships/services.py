@@ -18,6 +18,9 @@ catalog/views.py:VideoViewSet does the same for the API. A single
 video_detail check doesn't need this — one video means one query either
 way.
 """
+import calendar
+from datetime import timedelta
+
 from django.db import transaction
 from django.utils import timezone
 
@@ -283,3 +286,28 @@ def supersede_active_trial(user, paid_subscription, at=None):
                 trial.save(update_fields=['ends_at', 'superseded_by', 'updated_at'])
                 return trial
     return None
+
+
+def _add_months(moment, months):
+    """`moment` + `months` calendar months, clamping the day to the target
+    month's length (Jan 31 + 1 month = Feb 28/29), time and tzinfo kept."""
+    month_index = moment.month - 1 + months
+    year, month = moment.year + month_index // 12, month_index % 12 + 1
+    day = min(moment.day, calendar.monthrange(year, month)[1])
+    return moment.replace(year=year, month=month, day=day)
+
+
+def paid_period_end(plan, start):
+    """Phase 5B-2b: when a confirmed charge's paid period ends — the same
+    cadence the preapproval bills on (billing_cadence_for_plan): 30 days
+    -> start + 1 calendar month, 365 days -> start + 12 calendar months.
+    Fallback for a plan whose duration_days no longer maps to a cadence
+    (edited after signup): start + duration_days, or 30 days if unset —
+    MP already took the money, so access must still be granted."""
+    cadence = billing_cadence_for_plan(plan)
+    if cadence is not None:
+        frequency, frequency_type = cadence
+        if frequency_type == 'months':
+            return _add_months(start, frequency)
+        return start + timedelta(days=frequency)
+    return start + timedelta(days=plan.duration_days or 30)

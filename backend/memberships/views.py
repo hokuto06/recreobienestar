@@ -298,3 +298,83 @@ class StartSubscriptionView(APIView):
             {'init_point': preapproval['init_point'], 'preapproval_id': subscription.mp_preapproval_id},
             status=status.HTTP_201_CREATED,
         )
+
+
+# Statuses a member can cancel from their account. CANCELLED/EXPIRED are
+# already over (a repeat cancel is a no-op); TRIAL rows have no MP side.
+CANCELLABLE_STATUSES = (
+    SubscriptionStatus.ACTIVE, SubscriptionStatus.PAST_DUE, SubscriptionStatus.PENDING,
+)
+
+
+class CancelSubscriptionView(APIView):
+    """POST /api/subscription/cancel/ — a member cancels their OWN paid
+    subscription (Phase 5B-2b). Body: {"subscription": <id>}. Same
+    authenticated/CSRF model as StartSubscriptionView.
+
+    OWNERSHIP: looked up with user=request.user, so someone else's id is
+    indistinguishable from a nonexistent one (404) — never cancelled,
+    never confirmed to exist.
+
+    ORDER: MP first, then ours. The preapproval is cancelled at Mercado
+    Pago (sdk.preapproval().update(id, {'status': 'cancelled'})); only if
+    that succeeds is our row marked (memberships.webhooks.
+    mark_subscription_cancelled: CANCELLED with ends_at kept, so access
+    continues until the paid period ends — or EXPIRED for a never-paid
+    PENDING row). If MP fails, nothing of ours changes and the member gets
+    a clear error rather than a false "cancelled".
+
+    IDEMPOTENT: the row is locked for the whole operation, so a
+    double-submit waits, then finds it already CANCELLED/EXPIRED and
+    returns 200 without calling MP again. MP's own follow-up
+    subscription_preapproval "cancelled" notification is a no-op too.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        from .webhooks import mark_subscription_cancelled
+
+        subscription_id = request.data.get('subscription')
+        if not str(subscription_id or '').isdigit():
+            return Response({'detail': 'Suscripción no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+
+        with transaction.atomic():
+            subscription = (
+                Subscription.objects.select_for_update()
+                .filter(pk=subscription_id, user=request.user, is_trial=False)
+                .exclude(mp_preapproval_id='').first()
+            )
+            if subscription is None:
+                return Response({'detail': 'Suscripción no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+
+            if subscription.status not in CANCELLABLE_STATUSES:
+                return Response(self._payload(subscription), status=status.HTTP_200_OK)
+
+            try:
+                result = mercadopago.SDK(settings.MERCADOPAGO_ACCESS_TOKEN).preapproval().update(
+                    subscription.mp_preapproval_id, {'status': 'cancelled'},
+                )
+                result.raise_for_status()
+            except Exception:
+                logger.exception(
+                    'Mercado Pago preapproval cancel failed for Subscription %s (preapproval %s)',
+                    subscription.id, subscription.mp_preapproval_id,
+                )
+                return Response(
+                    {'detail': 'No pudimos cancelar tu suscripción en Mercado Pago. '
+                               'No se cambió nada — intentá de nuevo en unos minutos.'},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
+
+            mark_subscription_cancelled(subscription)
+            subscription.mp_status = 'cancelled'
+            subscription.save(update_fields=['status', 'ends_at', 'cancelled_at', 'mp_status', 'updated_at'])
+
+        return Response(self._payload(subscription), status=status.HTTP_200_OK)
+
+    @staticmethod
+    def _payload(subscription):
+        return {
+            'status': subscription.status,
+            'access_until': subscription.ends_at if subscription.is_active() else None,
+        }

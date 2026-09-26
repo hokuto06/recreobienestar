@@ -2,7 +2,7 @@ from django.contrib import admin, messages
 from django.utils import timezone
 from django.utils.html import format_html
 
-from .models import MembershipPlan, Subscription
+from .models import MembershipPlan, Subscription, SubscriptionCharge
 
 
 @admin.register(MembershipPlan)
@@ -111,3 +111,24 @@ class SubscriptionAdmin(admin.ModelAdmin):
             'Revisá ends_at si corresponde extender la vigencia.',
             messages.SUCCESS,
         )
+
+
+@admin.register(SubscriptionCharge)
+class SubscriptionChargeAdmin(admin.ModelAdmin):
+    """Fase 5B-2b: registro de cobros recurrentes de Mercado Pago — solo
+    lectura. Lo escribe únicamente el webhook de suscripciones."""
+    list_display = (
+        'subscription', 'mp_payment_id', 'mp_payment_status', 'amount', 'currency',
+        'outcome', 'created_at',
+    )
+    list_filter = ('outcome', 'mp_payment_status')
+    search_fields = ('mp_payment_id', 'mp_authorized_payment_id', 'subscription__user__email')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

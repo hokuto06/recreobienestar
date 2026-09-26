@@ -282,3 +282,43 @@ class Subscription(TimeStampedModel):
         save() (see start_grace)."""
         self.ends_at = at or timezone.now()
         self.superseded_by = paid_subscription
+
+
+class SubscriptionChargeOutcome(models.TextChoices):
+    ACTIVATED = 'activated', 'Cobro aprobado — acceso extendido'
+    AMOUNT_MISMATCH = 'amount_mismatch', 'Monto/moneda no coincide — revisar a mano'
+    GRACE_STARTED = 'grace_started', 'Cobro fallido — período de gracia iniciado'
+    GRACE_RUNNING = 'grace_running', 'Cobro fallido — gracia ya en curso'
+    PAST_DUE = 'past_due', 'Cobro fallido — gracia vencida, sin acceso'
+    FIRST_CHARGE_FAILED = 'first_charge_failed', 'Primer cobro fallido — nunca activada'
+    PENDING_CHARGE = 'pending_charge', 'Cobro en proceso'
+    IGNORED = 'ignored', 'Sin efecto (suscripción no activa)'
+
+
+class SubscriptionCharge(TimeStampedModel):
+    """Phase 5B-2b: one row per Mercado Pago payment attempt on a
+    subscription's recurring charge (a `subscription_authorized_payment`
+    notification). It is the idempotency ledger for the subscription
+    webhook: mp_payment_id is UNIQUE, and a notification for a payment
+    already recorded with the same MP status — or already APPROVED and
+    applied — is a no-op. That is what stops MP's duplicate/retried
+    notifications from extending ends_at twice for one charge. Also the
+    audit trail Carla sees in the admin. Only ever written by
+    memberships.webhooks, never by hand."""
+    subscription = models.ForeignKey(
+        Subscription, on_delete=models.PROTECT, related_name='charges',
+    )
+    mp_authorized_payment_id = models.CharField(max_length=100, db_index=True)
+    mp_payment_id = models.CharField(max_length=100, unique=True)
+    mp_payment_status = models.CharField(max_length=30, blank=True, default='')
+    amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    currency = models.CharField(max_length=3, blank=True, default='')
+    outcome = models.CharField(max_length=30, choices=SubscriptionChargeOutcome.choices)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Cobro de suscripción'
+        verbose_name_plural = 'Cobros de suscripción'
+
+    def __str__(self):
+        return f'{self.subscription_id} — pago {self.mp_payment_id} ({self.mp_payment_status})'

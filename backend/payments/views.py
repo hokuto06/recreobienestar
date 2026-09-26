@@ -21,6 +21,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from memberships.webhooks import handle_subscription_notification
 from site_content.models import Offering
 
 from . import services
@@ -268,6 +269,16 @@ class MercadoPagoWebhookView(APIView):
                 exc.reason.value, x_request_id,
             )
             return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+        # Phase 5B-2b: any notification type other than "payment" —
+        # subscription_preapproval, subscription_authorized_payment, or an
+        # unknown one (acknowledged with 200, no-op) — is handled by
+        # memberships.webhooks, after the same signature check above.
+        # type=payment, or no type at all, continues below exactly as
+        # before.
+        notification_type = request.query_params.get('type')
+        if notification_type and notification_type != 'payment':
+            return Response(status=handle_subscription_notification(notification_type, data_id))
 
         if not data_id:
             # Signature-valid but no payment id to act on (e.g. a

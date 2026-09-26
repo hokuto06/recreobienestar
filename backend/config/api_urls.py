@@ -2,7 +2,9 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from catalog.views import CategoryListView, ProgramListView, VideoViewSet
-from memberships.views import MembershipPlanListView, StartSubscriptionView, StartTrialView
+from memberships.views import (
+    CancelSubscriptionView, MembershipPlanListView, StartSubscriptionView, StartTrialView,
+)
 from payments.views import CheckoutInitiationView, MercadoPagoWebhookView
 from site_content.views import (
     ContactMessageCreateView, OfferingListView, SiteSettingsView, TestimonialListView,
@@ -35,5 +37,7 @@ urlpatterns = [
     # Paid-plan signup via a Mercado Pago preapproval (Phase 5B-2a) — same
     # authenticated/CSRF reasoning; see StartSubscriptionView.
     path('subscribe/', StartSubscriptionView.as_view(), name='start-subscription'),
+    # Member cancels their own subscription (Phase 5B-2b) — same reasoning.
+    path('subscription/cancel/', CancelSubscriptionView.as_view(), name='cancel-subscription'),
     path('', include(router.urls)),
 ]

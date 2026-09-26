@@ -90,6 +90,9 @@
               {{ subscription.ends_at|date:"d/m/Y" }}
             </p>
           {% endif %}
+          {% if subscription.mp_preapproval_id %}
+            <p style="margin-top:0.5rem"><a href="{% url 'memberships:mi_suscripcion' %}">Administrar suscripción →</a></p>
+          {% endif %}
         {% else %}
           <h3 style="margin-top:0.6rem">Plan gratuito</h3>
           <p style="color:var(--color-text-muted);font-size:0.9rem">Todavía no tenés una membresía activa.</p>

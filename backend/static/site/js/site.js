@@ -246,4 +246,51 @@
         });
     });
   });
+
+  /* ---------- Cancelar suscripción (Fase 5B-2b) ----------
+     Same CSRF-via-meta-tag pattern as above. Asks for confirmation first
+     (cancelling is a real action at Mercado Pago), then reloads the page
+     so it shows the new state — including until when access continues.
+     Any failure shows [data-cancel-error]; the server leaves the
+     subscription untouched in that case. */
+  document.querySelectorAll('[data-cancel-form]').forEach(function (form) {
+    form.addEventListener('submit', function (evt) {
+      evt.preventDefault();
+      var button = form.querySelector('[data-cancel-submit]');
+      var errorBox = document.querySelector('[data-cancel-error]');
+      var subscriptionId = form.getAttribute('data-subscription-id');
+      if (!csrfToken || !button || !subscriptionId || button.disabled) { return; }
+      if (!window.confirm('¿Seguro que querés cancelar tu suscripción?')) { return; }
+      if (errorBox) { errorBox.hidden = true; }
+      button.disabled = true;
+      var originalLabel = button.textContent;
+      button.textContent = 'Cancelando…';
+
+      fetch('/api/subscription/cancel/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken,
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ subscription: subscriptionId }),
+      })
+        .then(function (resp) {
+          return resp.json().catch(function () { return {}; }).then(function (data) {
+            if (!resp.ok) {
+              throw new Error(data.detail || 'No se pudo cancelar la suscripción. Intentá de nuevo en unos minutos.');
+            }
+            window.location.reload();
+          });
+        })
+        .catch(function (err) {
+          button.disabled = false;
+          button.textContent = originalLabel;
+          if (errorBox) {
+            errorBox.textContent = (err && err.message) || 'No se pudo cancelar la suscripción. Intentá de nuevo en unos minutos.';
+            errorBox.hidden = false;
+          }
+        });
+    });
+  });
 })();
