@@ -84,6 +84,49 @@ class AccessControlTests(TestCase):
         video = self._video(access_level='plan1')
         self.assertTrue(can_access_video(self.user, video))
 
+    # ── Phase 5B-1: trial grants FULL catalog access, not just its own plan's tier ──
+    def test_trial_grants_access_to_a_different_tier_video(self):
+        plan3 = MembershipPlan.objects.create(tier='plan3', name='Plan 3', price=5000)
+        Subscription.objects.create(
+            user=self.user, plan=self.plan1, status='trial',
+            ends_at=self.now + timedelta(days=3), is_trial=True,
+        )
+        video = self._video(access_level=plan3.tier)
+        self.assertTrue(can_access_video(self.user, video))
+
+    def test_trial_grants_access_to_all_paid_video(self):
+        Subscription.objects.create(
+            user=self.user, plan=self.plan1, status='trial',
+            ends_at=self.now + timedelta(days=3), is_trial=True,
+        )
+        video = self._video(access_level='all_paid')
+        self.assertTrue(can_access_video(self.user, video))
+
+    def test_trial_does_not_bypass_unpublished_gate(self):
+        Subscription.objects.create(
+            user=self.user, plan=self.plan1, status='trial',
+            ends_at=self.now + timedelta(days=3), is_trial=True,
+        )
+        video = self._video(access_level='plan2', is_published=False)
+        self.assertFalse(can_access_video(self.user, video))
+
+    def test_trial_does_not_affect_free_video_access(self):
+        Subscription.objects.create(
+            user=self.user, plan=self.plan1, status='trial',
+            ends_at=self.now + timedelta(days=3), is_trial=True,
+        )
+        video = self._video(access_level='free')
+        self.assertTrue(can_access_video(self.user, video))
+        self.assertTrue(can_access_video(None, video))
+
+    def test_expired_trial_denies_access_to_paid_video(self):
+        Subscription.objects.create(
+            user=self.user, plan=self.plan1, status='trial',
+            ends_at=self.now - timedelta(days=1), is_trial=True,
+        )
+        video = self._video(access_level='plan2')
+        self.assertFalse(can_access_video(self.user, video))
+
     # ── expired membership denies access ────────────────────────────
     def test_expired_membership_denies_access_immediately(self):
         Subscription.objects.create(

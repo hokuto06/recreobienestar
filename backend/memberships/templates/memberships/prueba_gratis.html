@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Prueba gratuita | Recreo Bienestar{% endblock %}
+{% block content %}
+<section class="container member-hero">
+  <span class="eyebrow">Prueba gratuita</span>
+  <h1>Probá todos los planes de entrenamiento</h1>
+  <p class="lede" style="margin-top:0.5rem;max-width:60ch">
+    {% if plan %}
+      {{ plan.trial_days }} días de acceso completo a todo el contenido pago, sin tarjeta y sin costo.
+      Al terminar, elegís si te sumás a un plan — no se cobra nada automáticamente.
+    {% else %}
+      La prueba gratuita no está disponible en este momento.
+    {% endif %}
+  </p>
+</section>
+
+<section class="container section--tight" style="max-width:32ch">
+  {% if eligible %}
+    {% comment %}
+    data-trial-error: hidden by default, shown by site.js on a failed
+    /api/trial/ call (network error, 4xx/5xx) — never a silent failure.
+    No real no-JS fallback (same reasoning as the offering "Comprar"
+    form in offering_detail.html): a plain form submit would just show
+    raw JSON on success, not a redirect to the videoteca.
+    {% endcomment %}
+    <div class="alert alert-error" data-trial-error hidden></div>
+    <form data-trial-form>
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary btn-block" data-trial-submit>Empezar prueba</button>
+    </form>
+  {% elif already_used_trial %}
+    <p style="color:var(--color-text-muted)">Ya usaste tu prueba gratuita.</p>
+    <a class="btn btn-primary btn-block" href="/#membresias">Ver planes de membresía</a>
+  {% elif has_active_paid_plan %}
+    <p style="color:var(--color-text-muted)">Ya tenés una membresía activa.</p>
+    <a class="btn btn-primary btn-block" href="{% url 'catalog:video_library' %}">Ir a la videoteca</a>
+  {% else %}
+    <a class="btn btn-primary btn-block" href="/#membresias">Ver planes de membresía</a>
+  {% endif %}
+</section>
+{% endblock %}

@@ -2,7 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from catalog.views import CategoryListView, ProgramListView, VideoViewSet
-from memberships.views import MembershipPlanListView
+from memberships.views import MembershipPlanListView, StartTrialView
 from payments.views import CheckoutInitiationView, MercadoPagoWebhookView
 from site_content.views import (
     ContactMessageCreateView, OfferingListView, SiteSettingsView, TestimonialListView,
@@ -29,5 +29,8 @@ urlpatterns = [
     path('contacto/', ContactMessageCreateView.as_view(), name='contact-message-create'),
     path('checkout/', CheckoutInitiationView.as_view(), name='checkout-initiate'),
     path('mercadopago/webhook/', MercadoPagoWebhookView.as_view(), name='mercadopago-webhook'),
+    # Authenticated-only, same CSRF/SessionAuthentication reasoning as
+    # checkout — see StartTrialView's own docstring.
+    path('trial/', StartTrialView.as_view(), name='start-trial'),
     path('', include(router.urls)),
 ]

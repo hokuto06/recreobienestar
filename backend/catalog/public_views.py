@@ -10,7 +10,7 @@ from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from memberships.services import can_access_video
+from memberships.services import can_access_video, user_has_expired_trial
 from payments.models import OfferingPurchase
 
 from .models import Category, Program, Video
@@ -192,7 +192,11 @@ def video_detail(request, slug):
     video = get_object_or_404(Video.objects.select_related('category', 'program'), slug=slug)
 
     if not can_access_video(request.user, video):
-        return render(request, 'catalog/video_locked.html', {'video': video}, status=403)
+        # Phase 5B-1: distinguishes "your trial finished" from "you never
+        # had access" for the locked page's messaging only — not an
+        # access decision (that's can_access_video/is_active above).
+        context = {'video': video, 'trial_expired': user_has_expired_trial(request.user)}
+        return render(request, 'catalog/video_locked.html', context, status=403)
 
     progress = record_video_view(request.user, video)
     is_favorited = video.id in get_favorited_video_ids(request.user, videos=[video])

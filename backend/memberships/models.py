@@ -113,6 +113,17 @@ class Subscription(TimeStampedModel):
     )
     cancelled_at = models.DateTimeField(null=True, blank=True)
 
+    # ── Phase 5B-1: prueba gratuita de 7 días ──────────────────────────────
+    # True SOLO para la fila creada por memberships.views.StartTrialView —
+    # nunca cambia después (ni al expirar, cancelarse, etc.), a propósito:
+    # es lo que permite hacer cumplir "una prueba por usuario, para
+    # siempre" con un UniqueConstraint (abajo) en vez de depender de
+    # `status`, que sí puede cambiar con el tiempo.
+    is_trial = models.BooleanField(
+        default=False,
+        help_text='Marca la suscripción creada por la prueba gratuita de 7 días. No se edita a mano.',
+    )
+
     # ── Phase 5A: suscripción recurrente — campos de ciclo de vida ─────────
     # Solo lo que 5A necesita para el acceso durante prueba/gracia — los
     # campos específicos de Mercado Pago (preapproval id, payer id, último
@@ -134,6 +145,21 @@ class Subscription(TimeStampedModel):
         ordering = ['-created_at']
         verbose_name = 'Suscripción'
         verbose_name_plural = 'Suscripciones'
+        constraints = [
+            # DB-level enforcement of "one free trial per user, ever" —
+            # the application-level check in StartTrialView is the normal
+            # path (a clear error before ever attempting the insert), this
+            # constraint is the race-safety net for two concurrent
+            # double-submits (the second INSERT raises IntegrityError,
+            # which the view catches and turns into the same rejection).
+            # Scoped to is_trial=True only, so it never constrains a
+            # user's ordinary paid-plan subscriptions (e.g. resubscribing
+            # to the same plan later).
+            models.UniqueConstraint(
+                fields=['user'], condition=models.Q(is_trial=True),
+                name='one_trial_subscription_per_user',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.user} — {self.plan} ({self.get_status_display()})'
