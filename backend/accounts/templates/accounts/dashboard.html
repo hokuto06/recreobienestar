@@ -98,7 +98,10 @@
           <p style="color:var(--color-text-muted);font-size:0.9rem">Todavía no tenés una membresía activa.</p>
         {% endif %}
 
-        {% if not membership_is_active %}
+        {% if subscription_pending %}
+          {# Nothing to renew yet: Mercado Pago hasn't confirmed the payment. #}
+          <p data-pending-payment-notice style="color:var(--color-text-muted);font-size:0.9rem;margin-top:1rem">Estamos confirmando tu pago. Puede tardar unos minutos.</p>
+        {% elif not membership_is_active %}
           <a class="btn btn-primary btn-block" href="/#membresias" style="margin-top:1rem">
             {% if subscription %}Renovar membresía{% else %}Ver planes de membresía{% endif %}
           </a>

@@ -81,6 +81,12 @@ def membresia_detail(request, slug):
         'has_active_paid_subscription': has_active_paid_subscription,
         'has_active_trial': user_has_active_trial(request.user),
         'eligible': cadence is not None and not has_active_paid_subscription,
+        # MP rejects the payment when the payer's MP account email differs
+        # from the payer_email we send (the Recreo account email), so the
+        # page shows it up front. StartSubscriptionView still rejects an
+        # empty email server-side; this only keeps the button from being
+        # offered to someone who can't use it.
+        'payer_email': request.user.email,
     }
     return render(request, 'memberships/membresia_detail.html', context)
 

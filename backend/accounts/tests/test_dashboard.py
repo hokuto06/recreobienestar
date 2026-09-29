@@ -45,6 +45,17 @@ class DashboardMembershipStatusTests(TestCase):
         self.assertContains(resp, 'Venció el')
         self.assertContains(resp, 'Renovar membresía')
 
+    def test_dashboard_pending_subscription_shows_confirming_not_renew(self):
+        user = User.objects.create_user(username='pendiente', password='x')
+        Subscription.objects.create(
+            user=user, plan=self.plan, status='pending', mp_preapproval_id='pre-1',
+        )
+        self.client.force_login(user)
+        resp = self.client.get(reverse('accounts:dashboard'))
+        self.assertContains(resp, 'Estamos confirmando tu pago. Puede tardar unos minutos.')
+        self.assertNotContains(resp, 'Renovar membresía')
+        self.assertNotContains(resp, 'btn btn-primary btn-block" href="/#membresias"')
+
     def test_dashboard_lists_available_and_locked_videos(self):
         user = User.objects.create_user(username='mixta', password='x')
         Video.objects.create(
