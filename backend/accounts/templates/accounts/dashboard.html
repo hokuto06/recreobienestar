@@ -77,34 +77,44 @@
           Estado de membresía
         </span>
 
-        {% if subscription %}
+        {% if subscription_never_paid %}
+          {# EXPIRED without ever being charged (MP failed at signup, or the pending signup was cancelled) — not a lapsed membership. #}
           <h3 style="margin-top:0.6rem">{{ subscription.plan.name }}</h3>
-          <p>
-            <span class="status-pill {% if membership_is_active %}is-active{% else %}is-inactive{% endif %}">
-              {% if membership_is_active %}Activa{% else %}{{ subscription.get_status_display }}{% endif %}
-            </span>
-          </p>
-          {% if subscription.ends_at %}
-            <p style="color:var(--color-text-muted);font-size:0.9rem;margin-top:0.5rem">
-              {% if membership_is_active %}Vence el {% else %}Venció el {% endif %}
-              {{ subscription.ends_at|date:"d/m/Y" }}
-            </p>
-          {% endif %}
-          {% if subscription.mp_preapproval_id %}
-            <p style="margin-top:0.5rem"><a href="{% url 'memberships:mi_suscripcion' %}">Administrar suscripción →</a></p>
-          {% endif %}
+          <p style="color:var(--color-text-muted);font-size:0.9rem" data-never-paid-notice>No pudimos procesar tu suscripción.</p>
+          <a class="btn btn-primary btn-block" href="/#membresias" style="margin-top:1rem">Ver planes de membresía</a>
         {% else %}
-          <h3 style="margin-top:0.6rem">Plan gratuito</h3>
-          <p style="color:var(--color-text-muted);font-size:0.9rem">Todavía no tenés una membresía activa.</p>
-        {% endif %}
+          {% if subscription %}
+            <h3 style="margin-top:0.6rem">{{ subscription.plan.name }}</h3>
+            <p>
+              <span class="status-pill {% if membership_is_active %}is-active{% else %}is-inactive{% endif %}">
+                {% if membership_is_active %}Activa{% else %}{{ subscription.get_status_display }}{% endif %}
+              </span>
+            </p>
+            {% if subscription.ends_at %}
+              <p style="color:var(--color-text-muted);font-size:0.9rem;margin-top:0.5rem">
+                {% if membership_is_active %}Vence el {% else %}Venció el {% endif %}
+                {{ subscription.ends_at|date:"d/m/Y" }}
+              </p>
+            {% endif %}
+            {% if pending_subscription %}
+              <p style="color:var(--color-text-muted);font-size:0.9rem;margin-top:0.5rem" data-pending-payment-notice>Estamos confirmando tu pago del {{ pending_subscription.plan.name }}.</p>
+            {% endif %}
+            {% if subscription.mp_preapproval_id %}
+              <p style="margin-top:0.5rem"><a href="{% url 'memberships:mi_suscripcion' %}">Administrar suscripción →</a></p>
+            {% endif %}
+          {% else %}
+            <h3 style="margin-top:0.6rem">Plan gratuito</h3>
+            <p style="color:var(--color-text-muted);font-size:0.9rem">Todavía no tenés una membresía activa.</p>
+          {% endif %}
 
-        {% if subscription_pending %}
-          {# Nothing to renew yet: Mercado Pago hasn't confirmed the payment. #}
-          <p data-pending-payment-notice style="color:var(--color-text-muted);font-size:0.9rem;margin-top:1rem">Estamos confirmando tu pago. Puede tardar unos minutos.</p>
-        {% elif not membership_is_active %}
-          <a class="btn btn-primary btn-block" href="/#membresias" style="margin-top:1rem">
-            {% if subscription %}Renovar membresía{% else %}Ver planes de membresía{% endif %}
-          </a>
+          {% if subscription_pending %}
+            {# Nothing to renew yet: Mercado Pago hasn't confirmed the payment. #}
+            <p data-pending-payment-notice style="color:var(--color-text-muted);font-size:0.9rem;margin-top:1rem">Estamos confirmando tu pago. Puede tardar unos minutos.</p>
+          {% elif not membership_is_active %}
+            <a class="btn btn-primary btn-block" href="/#membresias" style="margin-top:1rem">
+              {% if subscription %}Renovar membresía{% else %}Ver planes de membresía{% endif %}
+            </a>
+          {% endif %}
         {% endif %}
       </div>
 
