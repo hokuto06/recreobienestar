@@ -279,6 +279,10 @@ SESSION_COOKIE_HTTPONLY = True
 # flipping this back — keeps the cookie itself inaccessible to any script,
 # including an XSS payload, either way.
 CSRF_COOKIE_HTTPONLY = True
+# Friendly 403 page (same status, same checks) instead of Django's bare
+# "Verificación CSRF fallida" — typically a form left open across a login
+# in another tab, since login rotates the CSRF cookie.
+CSRF_FAILURE_VIEW = 'common.views.csrf_failure'
 
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'

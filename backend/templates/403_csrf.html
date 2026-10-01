@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Página desactualizada | Recreo Bienestar{% endblock %}
+{% block content %}
+<section class="container video-locked-page">
+  <h1>La página quedó desactualizada</h1>
+  <p class="lede" style="margin-top:var(--space-3)">
+    Recargala e intentá de nuevo. Tus datos no se enviaron, así que no se guardó ningún cambio.
+  </p>
+  <p style="margin-top:var(--space-3);color:var(--color-text-muted)">
+    Suele pasar cuando la página estuvo abierta un rato o si iniciaste o cerraste sesión en otra pestaña.
+  </p>
+  <div style="margin-top:var(--space-5)">
+    {% if back_path %}
+      <a class="btn btn-primary" href="{{ back_path }}">Volver a la página anterior</a>
+      <a class="btn btn-ghost" href="/">Ir al inicio</a>
+    {% else %}
+      <a class="btn btn-primary" href="/">Ir al inicio</a>
+      <a class="btn btn-ghost" href="{% url 'accounts:login' %}">Ingresar</a>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
