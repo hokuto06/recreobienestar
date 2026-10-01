@@ -18,9 +18,14 @@ from django.views.generic import CreateView, ListView, UpdateView
 
 from catalog.models import Favorite, Video
 from catalog.services import get_continue_watching, get_favorited_video_ids, get_progress_map
-from common.choices import VideoAccessLevel
+from common.choices import SubscriptionStatus, VideoAccessLevel
 from memberships.models import Subscription
-from memberships.services import can_access_video, get_current_subscription
+from memberships.services import (
+    can_access_video,
+    get_current_subscription,
+    get_newer_pending_subscription,
+    subscription_was_never_paid,
+)
 from payments.models import OfferingPurchase
 
 from .forms import EmailOrUsernameAuthenticationForm, ProfileForm, RegistrationForm
@@ -227,6 +232,12 @@ def dashboard(request):
         'profile': profile,
         'subscription': current_subscription,
         'membership_is_active': membership_is_active,
+        'subscription_pending': (
+            current_subscription is not None
+            and current_subscription.status == SubscriptionStatus.PENDING
+        ),
+        'pending_subscription': get_newer_pending_subscription(current_subscription, all_subscriptions),
+        'subscription_never_paid': subscription_was_never_paid(current_subscription),
         'available_videos': sorted(available_videos, key=lambda v: v.display_order)[:8],
         'locked_videos': sorted(locked_videos, key=lambda v: v.display_order)[:6],
         'recent_videos': sorted(

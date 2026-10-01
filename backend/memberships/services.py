@@ -142,9 +142,12 @@ def user_has_purchased_offering_unlocking(user, video, purchases=None):
 
 def get_current_subscription(user, subscriptions=None):
     """The subscription to treat as "your membership" for display purposes
-    (dashboard, profile) — the most recently created one, active or not, so
-    an expired/cancelled plan still shows as "your plan, expired" rather
-    than silently falling back to "no plan". Not an access decision (see
+    (dashboard, profile). Rule: the most recently created subscription that
+    currently grants access (is_active()); if none does, the most recently
+    created one, active or not — so an expired/cancelled plan still shows
+    as "your plan, expired" rather than silently falling back to "no plan".
+    Preferring the entitled one keeps a running trial on screen while a
+    newer paid signup is still PENDING. Not an access decision (see
     can_access_video for that) — purely what to show in the UI.
 
     Pass a pre-fetched `subscriptions` list to avoid a second query when the
@@ -155,7 +158,34 @@ def get_current_subscription(user, subscriptions=None):
         if user is not None and getattr(user, 'is_authenticated', False)
         else []
     )
-    return max(candidates, key=lambda s: s.created_at, default=None)
+    entitled = [s for s in candidates if s.is_active()]
+    return max(entitled or candidates, key=lambda s: s.created_at, default=None)
+
+
+def get_newer_pending_subscription(current, subscriptions):
+    """The user's most recent subscription, if it is PENDING (a paid signup
+    MP hasn't confirmed yet) and isn't `current` itself — i.e. what the
+    dashboard mentions as "confirming your payment" underneath the
+    subscription that still governs access. Display only."""
+    latest = max(subscriptions, key=lambda s: s.created_at, default=None)
+    if latest is None or latest is current or latest.status != SubscriptionStatus.PENDING:
+        return None
+    return latest
+
+
+def subscription_was_never_paid(subscription):
+    """True for a paid-plan subscription that ended without ever being
+    paid: status EXPIRED, not a trial, and no SubscriptionCharge that
+    activated it. Code only sets EXPIRED on never-paid rows (MP failing at
+    signup, or a PENDING row being cancelled); the charge check keeps a row
+    that was paid and later expired by hand from reading as a failed
+    attempt. Display only — one query, for a single subscription."""
+    if subscription is None or subscription.is_trial:
+        return False
+    if subscription.status != SubscriptionStatus.EXPIRED:
+        return False
+    from .models import SubscriptionChargeOutcome
+    return not subscription.charges.filter(outcome=SubscriptionChargeOutcome.ACTIVATED).exists()
 
 
 def can_access_video(user, video, at=None, subscriptions=None, purchases=None):

@@ -26,11 +26,17 @@
     {% if has_active_trial %}
       <p style="color:var(--color-text-muted)">Tu prueba gratuita sigue activa hasta que Mercado Pago confirme el pago; en ese momento termina y empieza tu plan.</p>
     {% endif %}
-    <div class="alert alert-error" data-subscribe-error hidden></div>
-    <form data-subscribe-form data-plan-slug="{{ plan.slug }}">
-      {% csrf_token %}
-      <button type="submit" class="btn btn-primary btn-block" data-subscribe-submit>Suscribirme</button>
-    </form>
+    {% if payer_email %}
+      <p data-payer-email-notice>Vas a pagar con <strong>{{ payer_email }}</strong>. Tu cuenta de Mercado Pago tiene que usar esa misma dirección; si no coincide, el pago va a ser rechazado.</p>
+      <p style="color:var(--color-text-muted);font-size:0.9rem">¿No es tu email? Escribinos desde el <a href="/#contacto">formulario de contacto</a> antes de suscribirte y lo actualizamos.</p>
+      <div class="alert alert-error" data-subscribe-error hidden></div>
+      <form data-subscribe-form data-plan-slug="{{ plan.slug }}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary btn-block" data-subscribe-submit>Suscribirme</button>
+      </form>
+    {% else %}
+      <p data-payer-email-notice style="color:var(--color-text-muted)">Tu cuenta no tiene un email cargado. Mercado Pago necesita el email de tu cuenta para cobrar la suscripción, y tiene que ser el mismo que usás en Mercado Pago. Escribinos desde el <a href="/#contacto">formulario de contacto</a> y lo agregamos.</p>
+    {% endif %}
   {% elif has_active_paid_subscription %}
     <p style="color:var(--color-text-muted)">Ya tenés una membresía activa. Por ahora no se puede cambiar de plan.</p>
     <a class="btn btn-primary btn-block" href="{% url 'catalog:video_library' %}">Ir a la videoteca</a>

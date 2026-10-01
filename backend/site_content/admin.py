@@ -14,7 +14,7 @@ class SiteSettingsAdmin(admin.ModelAdmin):
     it (dashboard, home page API), so there's nothing to seed manually."""
     fieldsets = (
         ('Portada', {'fields': ('hero_headline', 'tagline')}),
-        ('Carla', {'fields': ('carla_bio', 'carla_bio_highlight')}),
+        ('Carla', {'fields': ('carla_photo', 'carla_bio', 'carla_bio_highlight')}),
         ('Contacto y redes', {'fields': ('contact_email', 'instagram_url')}),
         ('Podcast', {'fields': ('podcast_name', 'podcast_url')}),
     )

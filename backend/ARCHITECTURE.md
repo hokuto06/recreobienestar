@@ -585,9 +585,37 @@ alongside it.
 ## 19. Commands required to resume development
 
 ```bash
-# Sync latest backend/ to the server (from this repo, local machine)
-rsync -az --exclude='.git' --exclude='__pycache__' --exclude='.env' \
+# Sync latest backend/ to the server (from this repo, local machine) —
+# dry-run with -n --itemize-changes first. Every exclude below is required:
+# without them the rsync pushes the local venv, the dev SQLite DB, local
+# media/staticfiles and a STALE local copy of the static site
+# (nginx/static-root/, populated by the frontend rsync below — never by
+# this one) over production's. The root anchors ('/db.sqlite3' etc.) match
+# only directly under backend/. nginx/conf.d/ is synced deliberately: if
+# the dry-run lists it with anything beyond a timestamp change ('..t'),
+# that's an nginx config change — compare sha256sum on both sides first.
+rsync -az --itemize-changes \
+  --exclude='.git' --exclude='__pycache__' --exclude='.env' \
+  --exclude='venv' --exclude='/db.sqlite3' \
+  --exclude='/nginx/static-root' --exclude='/nginx/logs' \
+  --exclude='/media' --exclude='/staticfiles' \
   backend/ ubuntu@<ec2-host>:/home/ubuntu/recreo-bienestar-backend/
+
+# Sync the static site (repo root) into nginx/static-root/ — dry-run with
+# -n --itemize-changes first. The root-anchored image excludes ('/*.jpeg'
+# etc.) keep a stray photo at the repo root (e.g. a source image for
+# set_carla_photo) from being published as https://recreobienestar.com/<file>;
+# the anchors only match files directly at the root, so an image added
+# later inside a subfolder still deploys normally.
+# Source photos belong OUTSIDE the repo (e.g. /home/hokuto/carla.jpeg).
+# The dry-run must list no image file and no dotfile; if one shows up, stop.
+rsync -az --itemize-changes \
+  --exclude='.git' --exclude='.gitignore' --exclude='.claude' \
+  --exclude='backend' --exclude='node_modules' \
+  --exclude='.env' --exclude='*.env' --exclude='README.md' \
+  --exclude='/*.jpg' --exclude='/*.jpeg' --exclude='/*.png' \
+  --exclude='/*.webp' --exclude='/*.heic' \
+  ./ ubuntu@<ec2-host>:/home/ubuntu/recreo-bienestar-backend/nginx/static-root/
 
 # Rebuild + redeploy Django only (recreo-db untouched)
 cd /home/ubuntu/recreo-bienestar-backend

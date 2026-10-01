@@ -459,6 +459,22 @@ class MembresiaPagesTests(_PlansMixin, TestCase):
         self.assertContains(resp, 'por año')
         self.assertContains(resp, 'csrfmiddlewaretoken')
 
+    def test_page_shows_users_own_email_before_subscribe_button(self):
+        self.client.force_login(self.user)
+        resp = self.client.get(f'/membresia/{self.monthly.slug}/')
+        body = resp.content.decode()
+        self.assertContains(resp, 'Vas a pagar con <strong>socia@example.com</strong>', html=False)
+        self.assertContains(resp, 'si no coincide, el pago va a ser rechazado')
+        self.assertLess(body.index('data-payer-email-notice'), body.index('data-subscribe-form'))
+
+    def test_user_without_email_gets_explanation_not_button(self):
+        user = User.objects.create_user(username='sin_email_pagina', password='x')
+        self.client.force_login(user)
+        resp = self.client.get(f'/membresia/{self.monthly.slug}/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, 'data-subscribe-form')
+        self.assertContains(resp, 'Tu cuenta no tiene un email cargado')
+
     def test_trial_user_warned_trial_ends_on_payment_confirmation(self):
         now = timezone.now()
         Subscription.objects.create(

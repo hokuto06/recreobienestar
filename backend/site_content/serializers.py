@@ -4,13 +4,23 @@ from .models import ContactMessage, Offering, SiteSettings, Testimonial
 
 
 class SiteSettingsSerializer(serializers.ModelSerializer):
+    # A site-relative URL ("/media/site/carla/…"), not DRF's default
+    # absolute one: the origin sits behind CloudFront and nginx, so an
+    # absolute URL built from the request could come out as http:// and be
+    # blocked as mixed content on the https home page. null when unset.
+    carla_photo_url = serializers.SerializerMethodField()
+
     class Meta:
         model = SiteSettings
         fields = [
             'tagline', 'hero_headline', 'carla_bio', 'carla_bio_highlight',
+            'carla_photo_url',
             'contact_email', 'instagram_url',
             'podcast_name', 'podcast_url',
         ]
+
+    def get_carla_photo_url(self, obj):
+        return obj.carla_photo.url if obj.carla_photo else None
 
 
 class OfferingSerializer(serializers.ModelSerializer):
