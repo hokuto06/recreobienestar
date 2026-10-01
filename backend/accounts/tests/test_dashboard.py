@@ -55,7 +55,7 @@ class DashboardMembershipStatusTests(TestCase):
         resp = self.client.get(reverse('accounts:dashboard'))
         self.assertContains(resp, 'Estamos confirmando tu pago. Puede tardar unos minutos.')
         self.assertNotContains(resp, 'Renovar membresía')
-        self.assertNotContains(resp, 'btn btn-primary btn-block" href="/#membresias"')
+        self.assertNotContains(resp, 'btn btn-primary btn-block" href="/#columna-sana"')
 
     def test_running_trial_stays_primary_while_newer_paid_signup_is_pending(self):
         user = User.objects.create_user(username='prueba_y_pago', password='x')

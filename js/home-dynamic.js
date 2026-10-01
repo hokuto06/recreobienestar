@@ -2,7 +2,7 @@
  * Recreo Bienestar — contenido dinámico de la portada.
  * Vanilla JS, sin dependencias. Lee del API de solo lectura ya existente
  * (/api/programs/, /api/videos/, /api/plans/, /api/offerings/,
- * /api/site-settings/) para que Programas, Videoteca, Membresías,
+ * /api/site-settings/, /api/session/) para que Programas, Videoteca, Membresías,
  * Propuestas, el hero, la bio de Carla, el podcast y los datos de
  * contacto reflejen siempre lo que Carla carga en el Admin, en vez de
  * contenido de muestra escrito a mano en este HTML.
@@ -35,6 +35,31 @@
       if (!resp.ok) { throw new Error('bad response: ' + resp.status); }
       return resp.json();
     });
+  }
+
+  /* ---------- Botón de cuenta (nav + footer) ----------
+     index.html lo sirve nginx como archivo estático, así que no sabe si
+     hay sesión: arranca siempre como "Ingresar" y, si /api/session/
+     confirma una sesión, pasa a "Mi cuenta". Ante cualquier error queda
+     como estaba (fail safe). cache: 'no-store' para que el navegador
+     nunca reutilice una respuesta de otra sesión. */
+  var accountLinks = document.querySelectorAll('[data-account-link]');
+  if (accountLinks.length) {
+    fetch('/api/session/', {
+      headers: { 'Accept': 'application/json' },
+      credentials: 'same-origin',
+      cache: 'no-store',
+    }).then(function (resp) {
+      if (!resp.ok) { throw new Error('bad response: ' + resp.status); }
+      return resp.json();
+    }).then(function (data) {
+      if (!data || data.authenticated !== true) { return; }
+      accountLinks.forEach(function (link) {
+        link.setAttribute('href', '/mi-cuenta/');
+        var label = link.querySelector('[data-account-label]');
+        if (label) { label.textContent = 'Mi cuenta'; }
+      });
+    }).catch(function () { /* sin sesión confirmada: queda "Ingresar" */ });
   }
 
   /* ---------- Programas ---------- */

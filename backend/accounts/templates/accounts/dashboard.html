@@ -81,7 +81,7 @@
           {# EXPIRED without ever being charged (MP failed at signup, or the pending signup was cancelled) — not a lapsed membership. #}
           <h3 style="margin-top:0.6rem">{{ subscription.plan.name }}</h3>
           <p style="color:var(--color-text-muted);font-size:0.9rem" data-never-paid-notice>No pudimos procesar tu suscripción.</p>
-          <a class="btn btn-primary btn-block" href="/#membresias" style="margin-top:1rem">Ver planes de membresía</a>
+          <a class="btn btn-primary btn-block" href="/#columna-sana" style="margin-top:1rem">Ver planes de membresía</a>
         {% else %}
           {% if subscription %}
             <h3 style="margin-top:0.6rem">{{ subscription.plan.name }}</h3>
@@ -111,7 +111,7 @@
             {# Nothing to renew yet: Mercado Pago hasn't confirmed the payment. #}
             <p data-pending-payment-notice style="color:var(--color-text-muted);font-size:0.9rem;margin-top:1rem">Estamos confirmando tu pago. Puede tardar unos minutos.</p>
           {% elif not membership_is_active %}
-            <a class="btn btn-primary btn-block" href="/#membresias" style="margin-top:1rem">
+            <a class="btn btn-primary btn-block" href="/#columna-sana" style="margin-top:1rem">
               {% if subscription %}Renovar membresía{% else %}Ver planes de membresía{% endif %}
             </a>
           {% endif %}

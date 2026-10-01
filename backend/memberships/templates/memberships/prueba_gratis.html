@@ -30,12 +30,12 @@
     </form>
   {% elif already_used_trial %}
     <p style="color:var(--color-text-muted)">Ya usaste tu prueba gratuita.</p>
-    <a class="btn btn-primary btn-block" href="/#membresias">Ver planes de membresía</a>
+    <a class="btn btn-primary btn-block" href="/#columna-sana">Ver planes de membresía</a>
   {% elif has_active_paid_plan %}
     <p style="color:var(--color-text-muted)">Ya tenés una membresía activa.</p>
     <a class="btn btn-primary btn-block" href="{% url 'catalog:video_library' %}">Ir a la videoteca</a>
   {% else %}
-    <a class="btn btn-primary btn-block" href="/#membresias">Ver planes de membresía</a>
+    <a class="btn btn-primary btn-block" href="/#columna-sana">Ver planes de membresía</a>
   {% endif %}
 </section>
 {% endblock %}

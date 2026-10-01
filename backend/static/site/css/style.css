@@ -345,11 +345,6 @@ p.quote { font-size: 1.3rem; font-weight: 300; font-style: italic; color: var(--
   position: relative;
   padding-block: 0.25rem;
 }
-/* .nav-links a { color: var(--color-text) } (0,1,1) beats .btn-primary's
-   color:#fff (0,1,0), so "Acceder" rendered dark-on-teal (~2.3:1). This
-   scoped override (0,2,1) wins back the white label without touching
-   .nav-links a itself, which real nav links still depend on. */
-.nav-links a.btn-primary { color: #fff; }
 .nav-links a::after {
   content: "";
   position: absolute;
@@ -369,6 +364,19 @@ p.quote { font-size: 1.3rem; font-weight: 300; font-style: italic; color: var(--
 .nav-links a.nav-link-muted::after { background: var(--color-text-muted); }
 
 .nav-right { display: flex; align-items: center; gap: var(--space-5); }
+
+/* Botón de cuenta ("Ingresar" / "Mi cuenta" — ver home-dynamic.js). Vive
+   fuera de .nav-links para seguir visible en celular sin abrir el menú.
+   Misma tipografía que la nav (mayúsculas, tracking) pero en pastilla
+   btn-primary con ícono, un poco más grande que el btn-sm anterior, para
+   que se lea como LA acción de la barra y no como un ítem más. */
+.nav-account {
+  padding: 0.7rem 1.35rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.nav-account svg { flex-shrink: 0; }
 
 .nav-toggle {
   display: none;
@@ -413,7 +421,24 @@ p.quote { font-size: 1.3rem; font-weight: 300; font-style: italic; color: var(--
     opacity: 1;
     pointer-events: auto;
   }
-  .nav-links .btn-primary { width: 100%; justify-content: center; }
+  .nav-right { gap: var(--space-3); }
+  .nav-account { padding: 0.6rem 1rem; font-size: 0.75rem; letter-spacing: 0.08em; }
+}
+
+/* En pantallas angostas no entran logo + texto + hamburguesa: queda solo
+   el ícono de persona. El texto pasa a visually-hidden (no display:none)
+   para que el botón conserve su nombre accesible. */
+@media (max-width: 480px) {
+  .nav-account { padding: 0.6rem; }
+  .nav-account-label {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0,0,0,0);
+    white-space: nowrap;
+    border: 0;
+  }
 }
 
 /* ---------- Hero ----------
