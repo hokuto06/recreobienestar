@@ -53,6 +53,16 @@ class SiteSettings(TimeStampedModel):
             'Ej: "ReCREO, me permite expresar mi esencia…".'
         ),
     )
+    carla_photo = models.ImageField(
+        upload_to='site/carla/', blank=True,
+        verbose_name='Foto de Carla',
+        help_text=(
+            'Foto de la sección "Sobre Carla" de la portada. Usá una foto '
+            'vertical (más alta que ancha), de al menos 800 px de ancho, con '
+            'la cara cerca del centro: el marco es vertical (4:5) y recorta '
+            'un poco arriba y abajo. Si la dejás vacía se muestra la "C".'
+        ),
+    )
     contact_email = models.EmailField(blank=True)
     instagram_url = models.URLField(blank=True)
     podcast_name = models.CharField(max_length=150, blank=True)

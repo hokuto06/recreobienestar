@@ -589,6 +589,21 @@ alongside it.
 rsync -az --exclude='.git' --exclude='__pycache__' --exclude='.env' \
   backend/ ubuntu@<ec2-host>:/home/ubuntu/recreo-bienestar-backend/
 
+# Sync the static site (repo root) into nginx/static-root/ — dry-run with
+# -n --itemize-changes first. The root-anchored image excludes ('/*.jpeg'
+# etc.) keep a stray photo at the repo root (e.g. a source image for
+# set_carla_photo) from being published as https://recreobienestar.com/<file>;
+# the anchors only match files directly at the root, so an image added
+# later inside a subfolder still deploys normally.
+# Source photos belong OUTSIDE the repo (e.g. /home/hokuto/carla.jpeg).
+rsync -az --itemize-changes \
+  --exclude='.git' --exclude='.gitignore' --exclude='.claude' \
+  --exclude='backend' --exclude='node_modules' \
+  --exclude='.env' --exclude='*.env' --exclude='README.md' \
+  --exclude='/*.jpg' --exclude='/*.jpeg' --exclude='/*.png' \
+  --exclude='/*.webp' --exclude='/*.heic' \
+  ./ ubuntu@<ec2-host>:/home/ubuntu/recreo-bienestar-backend/nginx/static-root/
+
 # Rebuild + redeploy Django only (recreo-db untouched)
 cd /home/ubuntu/recreo-bienestar-backend
 docker compose up -d --build recreo-django

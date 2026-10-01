@@ -129,7 +129,11 @@
   <section class="section section--white fade-in" id="sobre-carla">
     <div class="container split split--reverse">
       <div class="split-media">
-        <div class="avatar-frame">
+        <!-- data-carla-photo: SiteSettings.carla_photo (Admin → Foto de
+             Carla). home-dynamic.js cambia la "C" por la foto solo cuando
+             la imagen terminó de cargar; si no hay foto o falla, queda la
+             "C" — nunca una imagen rota. -->
+        <div class="avatar-frame" data-carla-photo>
           <span class="avatar-mono">C</span>
         </div>
       </div>

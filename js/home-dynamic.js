@@ -378,6 +378,22 @@
         }).join('');
       }
     }
+    // Foto de Carla: solo una ruta interna ("/media/…"), y el marco se
+    // cambia recién en onload — si la imagen no carga, queda la "C".
+    var photoUrl = settings.carla_photo_url;
+    if (typeof photoUrl === 'string' && photoUrl.charAt(0) === '/' && photoUrl.charAt(1) !== '/') {
+      var photoFrame = document.querySelector('[data-carla-photo]');
+      if (photoFrame) {
+        var photo = new Image();
+        photo.alt = 'Carla';
+        photo.decoding = 'async';
+        photo.onload = function () {
+          photoFrame.classList.add('avatar-frame--photo');
+          photoFrame.replaceChildren(photo);
+        };
+        photo.src = photoUrl;
+      }
+    }
     if (settings.carla_bio_highlight) {
       var highlightEl = document.querySelector('[data-carla-bio-highlight]');
       if (highlightEl) {

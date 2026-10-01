@@ -36,3 +36,14 @@ backend/nginx/static-root/*
 backend/nginx/logs/*
 !backend/nginx/logs/.gitkeep
 
+
+# Source photos for uploaded media (e.g. Carla's photo, seeded with
+# `manage.py set_carla_photo`) live OUTSIDE the repo, never at its root:
+# the repo root is rsynced verbatim into nginx/static-root/, so an image
+# left here would be published as https://recreobienestar.com/<file>.
+# Uploaded media belongs in backend/media/ (ignored above) only.
+/*.jpg
+/*.jpeg
+/*.png
+/*.webp
+/*.heic

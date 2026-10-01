@@ -535,6 +535,23 @@ p.quote { font-size: 1.3rem; font-weight: 300; font-style: italic; color: var(--
   max-width: 340px;
   margin-inline: auto;
 }
+/* With Carla's photo (SiteSettings.carla_photo): a 4:5 portrait frame.
+   object-fit: cover fills it from any upload without distortion; the
+   focal point sits a little above centre, where a portrait's face is. */
+.avatar-frame--photo {
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+}
+.avatar-frame--photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 40%;
+}
+@media (max-width: 900px) {
+  .avatar-frame--photo { max-width: 280px; }
+}
 .avatar-mono {
   width: 116px; height: 116px;
   border-radius: 50%;
