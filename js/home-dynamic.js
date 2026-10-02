@@ -115,12 +115,16 @@
       }
       videosMount.innerHTML = videos.slice(0, 6).map(function (video) {
         // La API ya evalúa el acceso según la sesión de quien mira la
-        // página (memberships.services.can_access_video); thumbnail viene
-        // null cuando el video está bloqueado PARA ESTA VISITA puntual —
-        // nunca se expone un thumbnail derivado del ID de YouTube para un
-        // video al que esta visita no tiene acceso (ver
-        // catalog/serializers.py:VideoListSerializer.get_thumbnail).
-        var locked = !video.thumbnail;
+        // página (memberships.services.can_access_video) y lo dice en
+        // is_locked. Para un video bloqueado, thumbnail es solo el póster
+        // propio (/media/, nombre al azar) o null — nunca una miniatura
+        // derivada del ID de YouTube (ver catalog/serializers.py:
+        // VideoListSerializer.get_thumbnail). Sin is_locked (API anterior
+        // durante un deploy), vale la regla vieja: sin thumbnail = bloqueado.
+        var locked = typeof video.is_locked === 'boolean' ? video.is_locked : !video.thumbnail;
+        var poster = locked && video.thumbnail
+          ? '<span class="video-poster" style="background-image:url(\'' + esc(video.thumbnail) + '\')" aria-hidden="true"></span>'
+          : '';
         // display:block;position:relative on the unlocked branch matters,
         // not just cosmetically: .video-frame is an <a> with no display
         // rule in CSS, so without it the anchor stays inline and
@@ -136,6 +140,7 @@
         return (
           '<article class="video-card' + (locked ? ' video-locked' : '') + '">' +
             '<a class="video-frame" href="/videos/' + esc(video.slug) + '/" style="' + frameStyle + '" aria-label="' + esc(video.title) + '">' +
+              poster +
               '<span class="lock-chip">' +
                 (locked
                   ? '<svg width="13" height="13"><use href="#icon-lock"></use></svg> ' + esc(video.access_level_display || 'Exclusivo')

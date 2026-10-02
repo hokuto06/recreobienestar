@@ -90,7 +90,7 @@ class VideoAdmin(admin.ModelAdmin):
     search_fields = ('title', 'short_description', 'full_description', 'youtube_video_id')
     list_select_related = ('category', 'program')
     prepopulated_fields = {'slug': ('title',)}
-    readonly_fields = ('youtube_video_id', 'thumbnail_preview', 'created_at', 'updated_at')
+    readonly_fields = ('youtube_video_id', 'thumbnail_preview', 'poster_preview', 'created_at', 'updated_at')
     autocomplete_fields = ('category', 'program')
     date_hierarchy = 'publication_date'
     ordering = ('display_order', '-publication_date')
@@ -100,6 +100,7 @@ class VideoAdmin(admin.ModelAdmin):
         ('Video de YouTube', {
             'fields': ('youtube_url', 'youtube_video_id', 'thumbnail_url', 'thumbnail_preview'),
         }),
+        ('Imagen para videos bloqueados', {'fields': ('poster', 'poster_preview')}),
         ('Clasificación', {'fields': ('category', 'program', 'access_level')}),
         ('Publicación', {
             'fields': ('is_published', 'is_featured', 'display_order', 'duration_label', 'publication_date'),
@@ -130,6 +131,12 @@ class VideoAdmin(admin.ModelAdmin):
         if not url:
             return '—'
         return format_html('<img src="{}" style="max-height:120px;border-radius:4px" />', url)
+
+    @admin.display(description='Vista previa')
+    def poster_preview(self, obj):
+        if not obj.poster:
+            return 'Sin imagen todavía: las tarjetas bloqueadas muestran un fondo liso.'
+        return format_html('<img src="{}" style="max-height:120px;border-radius:4px" />', obj.poster.url)
 
     @admin.action(description='Publicar videos seleccionados')
     def publish(self, request, queryset):

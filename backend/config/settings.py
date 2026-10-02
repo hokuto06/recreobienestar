@@ -148,6 +148,11 @@ STORAGES = {
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# Download a video's poster from YouTube automatically after it's saved
+# (catalog/posters.py). Off in tests/local checks (settings_test_sqlite),
+# so the suite never touches the network.
+VIDEO_POSTER_AUTO_FETCH = env.bool('VIDEO_POSTER_AUTO_FETCH', default=True)
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # ── Authentication ───────────────────────────────────────────────────────

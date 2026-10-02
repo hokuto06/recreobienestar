@@ -719,6 +719,16 @@ p.quote { font-size: 1.3rem; font-weight: 300; font-style: italic; color: var(--
 
 .video-locked .video-facade { filter: grayscale(0.35) brightness(0.75); }
 .video-locked .play-btn { background: rgba(255,255,255,0.85); color: var(--color-locked); }
+/* Póster propio de un video bloqueado (Video.poster, servido desde /media/
+   con un nombre al azar — nunca la miniatura de YouTube, que lleva el ID
+   del video en la URL). Atenuado igual que .video-facade bloqueado; el
+   chip y el candado (z-index 2 y 1) quedan por encima. */
+.video-poster {
+  position: absolute; inset: 0;
+  background-size: cover;
+  background-position: center;
+  filter: grayscale(0.35) brightness(0.75);
+}
 .lock-chip {
   position: absolute;
   top: var(--space-3); left: var(--space-3);

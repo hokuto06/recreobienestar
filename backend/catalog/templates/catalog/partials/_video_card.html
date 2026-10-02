@@ -11,17 +11,21 @@ catalog.public_views._stamp_engagement or accounts.views.dashboard) — the
 {% if %} guards below make the card safe to reuse in a context that hasn't
 stamped them (they'll just not show).
 
-Locked cards deliberately do NOT set a background-image from
-thumbnail_display_url: that property falls back to a
-img.youtube.com/vi/<id>/... URL derived from the video's own ID when no
-thumbnail_url is set, which would hand out the ID through a card's inline
-style just as surely as embedding the player would. Same rule as
-video_locked.html, applied here too.
+Locked cards deliberately NEVER use thumbnail_display_url: that property
+falls back to a img.youtube.com/vi/<id>/... URL derived from the video's
+own ID when no thumbnail_url is set, which would hand out the ID through a
+card's inline style just as surely as embedding the player would. They
+show only video.poster — our own copy under a random /media/ name (see
+catalog/posters.py) — dimmed, with the padlock on top; no poster, the plain
+tinted box. Same rule as video_locked.html.
 {% endcomment %}
 <article class="video-card {% if not unlocked %}video-locked{% endif %}">
   <a href="{% url 'catalog:video_detail' video.slug %}" class="video-frame" aria-label="{{ video.title }}"
      {% if unlocked %}style="display:block;position:relative;background-image:url('{{ video.thumbnail_display_url }}');background-size:cover;background-position:center"
      {% else %}style="display:flex;align-items:center;justify-content:center;background:var(--color-bg-alt)"{% endif %}>
+    {% if not unlocked and video.poster %}
+      <span class="video-poster" style="background-image:url('{{ video.poster.url }}')" aria-hidden="true"></span>
+    {% endif %}
     <span class="lock-chip">
       {% if unlocked %}
         <svg width="13" height="13"><use href="#icon-play"></use></svg> Disponible
