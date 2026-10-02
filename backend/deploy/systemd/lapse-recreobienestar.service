@@ -1,0 +1,29 @@
+# Host-level systemd unit — daily end-of-grace processing
+# (memberships/management/commands/lapse_overdue_subscriptions.py) inside
+# the running recreo-django container. Installed manually via SSH:
+#
+#   sudo cp lapse-recreobienestar.service lapse-recreobienestar.timer \
+#     /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now lapse-recreobienestar.timer
+#
+# What it does: ACTIVE subscriptions whose grace period (after a failed
+# renewal) ended in the last 30 days with no successful charge -> PAST_DUE,
+# and emails the member ("suspendida") and Carla. Idempotent; a no-op when
+# nothing lapsed. Access is unchanged by it (those subscriptions are already
+# expired by date). To look without changing anything, run by hand:
+#   docker exec recreo-django python manage.py lapse_overdue_subscriptions --dry-run
+#
+# Same pattern as reconcile-recreobienestar.service: ExecStart calls
+# /usr/bin/docker directly (no repo script whose file mode a deploy could
+# break), User=ubuntu (docker group). Output: journalctl -u
+# lapse-recreobienestar.service
+[Unit]
+Description=Daily end-of-grace processing for recreo-bienestar subscriptions
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+ExecStart=/usr/bin/docker exec recreo-django python manage.py lapse_overdue_subscriptions

@@ -1,0 +1,15 @@
+# See lapse-recreobienestar.service for installation steps.
+#
+# Daily at 12:20 UTC (09:20 in Argentina): the member's "suspendida" email
+# lands in the morning, not in the middle of the night. Clear of
+# backup-recreobienestar (02:15 + up to 10 min), certbot-recreobienestar
+# (03:00/15:00) and reconcile-recreobienestar (:10/:40).
+[Unit]
+Description=Run recreo-bienestar end-of-grace processing daily
+
+[Timer]
+OnCalendar=*-*-* 12:20:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target
