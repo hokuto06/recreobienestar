@@ -1,0 +1,34 @@
+# Host-level systemd unit — runs the Mercado Pago reconcile safety net
+# (memberships/management/commands/reconcile_subscription_charges.py)
+# inside the running recreo-django container. Installed manually via SSH:
+#
+#   sudo cp reconcile-recreobienestar.service reconcile-recreobienestar.timer \
+#     /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now reconcile-recreobienestar.timer
+#
+# What it does: finds paid-plan subscriptions created in the last 7 days
+# that are still PENDING with no activated charge, asks MP for their
+# charges and applies any approved one through the webhook's own
+# process_authorized_payment (activation + both emails). Idempotent; no-op
+# when there's nothing stranded. Added after the 02/10/2026 incident
+# (MP notified a charge before its API could return it, never retried).
+#
+# Deliberately NO --dry-run: it has to be able to actually fix a stranded
+# subscription. To look without changing anything, run by hand:
+#   docker exec recreo-django python manage.py reconcile_subscription_charges --dry-run
+#
+# ExecStart calls /usr/bin/docker directly, not a script from the synced
+# repo, so it can't be broken by a file-mode change on deploy (which is
+# how backup-recreobienestar.service broke — see ARCHITECTURE.md §14).
+# User=ubuntu is in the docker group. Output: journalctl -u
+# reconcile-recreobienestar.service
+[Unit]
+Description=Reconcile stranded Mercado Pago subscription charges (recreo-bienestar)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+ExecStart=/usr/bin/docker exec recreo-django python manage.py reconcile_subscription_charges
