@@ -36,6 +36,9 @@ EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
 # Never download posters from YouTube in tests (catalog/posters.py).
 VIDEO_POSTER_AUTO_FETCH = False
 
+# Retry MP's early-404 lookups without actually sleeping (memberships/webhooks.py).
+MP_AUTHORIZED_PAYMENT_LOOKUP_DELAYS = (0, 0, 0)
+
 # CompressedManifestStaticFilesStorage requires collectstatic to have run
 # (entrypoint.sh does this before gunicorn starts, in production). Test
 # runs here bypass the entrypoint entirely, so there's no manifest —
