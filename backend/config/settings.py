@@ -196,15 +196,36 @@ AXES_COOLOFF_MESSAGE = (
 )
 
 # ── Email ────────────────────────────────────────────────────────────────
-# Console backend only — password reset emails are printed to the
-# recreo-django container logs (`docker logs recreo-django`), not actually
-# sent. This is intentional for this phase (no real transactional email is
-# configured yet). Production will need: EMAIL_BACKEND switched to SMTP,
-# EMAIL_HOST/PORT/HOST_USER/HOST_PASSWORD/USE_TLS, and DEFAULT_FROM_EMAIL —
-# most likely via SES given the AWS-hosted stack, added as env vars the
-# same way DB_* are handled, never hardcoded here.
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-DEFAULT_FROM_EMAIL = 'Recreo Bienestar <no-reply@recreobienestar.com>'
+# SMTP via Gmail (recreobienestar@gmail.com + an app password) by default.
+# EMAIL_BACKEND defaults to SMTP on purpose: a production .env that forgets
+# the email settings must fail loudly at startup, never quietly drop every
+# password-reset and sale email into the console log (which is what this
+# app did before). Local development opts OUT explicitly with
+# EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend in its .env.
+# Tests never reach SMTP: config.settings_test_sqlite forces locmem, and
+# Django's test runner forces locmem again on top of that.
+EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.smtp.EmailBackend')
+EMAIL_HOST = env('EMAIL_HOST', default='smtp.gmail.com')
+EMAIL_PORT = env.int('EMAIL_PORT', default=587)
+EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS', default=True)
+# Seconds before an unresponsive SMTP server is given up on. Sale emails go
+# out from the Mercado Pago webhook's request (after the sale is committed —
+# see common/notifications.py), so a hung server must not hold it for long.
+EMAIL_TIMEOUT = env.int('EMAIL_TIMEOUT', default=10)
+if EMAIL_BACKEND == 'django.core.mail.backends.smtp.EmailBackend':
+    # Same no-default env('...') pattern as SECRET_KEY/DB_PASSWORD: missing
+    # credentials raise ImproperlyConfigured at startup. Never hardcoded,
+    # never logged, no fallback.
+    EMAIL_HOST_USER = env('EMAIL_HOST_USER')
+    EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD')
+# Gmail rewrites any From that isn't the authenticated account, so this
+# must be recreobienestar@gmail.com (or a verified alias of it).
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='Recreo Bienestar <recreobienestar@gmail.com>')
+SERVER_EMAIL = DEFAULT_FROM_EMAIL
+# Where "you made a sale" emails go when SiteSettings.contact_email (set by
+# Carla in the Admin) is empty. Optional; falls back to DEFAULT_FROM_EMAIL's
+# inbox — see common.notifications.sale_notification_recipient.
+SALE_NOTIFICATION_EMAIL = env('SALE_NOTIFICATION_EMAIL', default='')
 
 # ── Mercado Pago (Phase 4B-1: checkout initiation, sandbox) ───────────────
 # Same env('...') pattern as SECRET_KEY/DB_PASSWORD above — no default, so

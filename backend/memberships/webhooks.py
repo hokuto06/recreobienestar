@@ -38,6 +38,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from common.choices import SubscriptionStatus
+from common.notifications import schedule_subscription_charge_notification
 
 from .models import Subscription, SubscriptionCharge, SubscriptionChargeOutcome
 from .services import paid_period_end, supersede_active_trial
@@ -207,6 +208,10 @@ def process_authorized_payment(authorized_payment_id):
             charge.outcome = SubscriptionChargeOutcome.PENDING_CHARGE
 
         charge.save()
+        if charge.outcome == SubscriptionChargeOutcome.ACTIVATED:
+            # Email to Carla, sent only after this transaction commits and
+            # unable to affect it — see common/notifications.py.
+            schedule_subscription_charge_notification(charge.pk)
         subscription.last_charge_payment_id = mp_payment_id
         subscription.last_charge_status = mp_payment_status
         subscription.save()

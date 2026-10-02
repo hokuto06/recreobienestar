@@ -22,6 +22,8 @@ from typing import Optional
 
 from django.db import transaction
 
+from common.notifications import schedule_offering_sale_notification
+
 from .models import OfferingPurchase, PurchaseStatus
 
 logger = logging.getLogger(__name__)
@@ -206,6 +208,10 @@ def apply_payment_to_purchase(payment, fallback_payment_id=None, expected_user=N
         if new_status is not None:
             purchase.status = new_status
         purchase.save(update_fields=['mp_payment_id', 'mp_status', 'status', 'updated_at'])
+        if purchase.status == PurchaseStatus.COMPLETED:
+            # Email to Carla, sent only after this transaction commits and
+            # unable to affect it — see common/notifications.py.
+            schedule_offering_sale_notification(purchase.pk)
 
     logger.info(
         'Mercado Pago payment %s: purchase %s -> status=%s (mp_status=%s)',
