@@ -37,6 +37,15 @@ class ExplodingEmailBackend(BaseEmailBackend):
         raise smtplib.SMTPAuthenticationError(535, b'5.7.8 Username and Password not accepted')
 
 
+CARLA = 'carla@example.com'
+
+
+def _to_carla():
+    """Carla's notifications only — each sale also emails the buyer (see
+    test_buyer_confirmations.py), so the outbox holds both."""
+    return [m for m in mail.outbox if m.to == [CARLA]]
+
+
 class _WebhookClient:
     def _notify(self, data_id, notification_type=None):
         url = f'{WEBHOOK_URL}?data.id={data_id}'
@@ -84,8 +93,8 @@ class OfferingSaleNotificationTests(_WebhookClient, APITestCase):
         resp = self._pay(mock_sdk)
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(self.purchase.status, PurchaseStatus.COMPLETED)
-        self.assertEqual(len(mail.outbox), 1)
-        email = mail.outbox[0]
+        self.assertEqual(len(_to_carla()), 1)
+        email = _to_carla()[0]
         self.assertEqual(email.to, ['carla@example.com'])
         self.assertEqual(email.from_email, settings.DEFAULT_FROM_EMAIL)
         self.assertEqual(email.subject, 'Nueva venta: Curso Neuro Postural — 55.000,00 ARS')
@@ -103,7 +112,7 @@ class OfferingSaleNotificationTests(_WebhookClient, APITestCase):
         self._pay(mock_sdk)
         self._pay(mock_sdk, payment_id='mp-pay-1-retry')
         self.assertEqual(self.purchase.status, PurchaseStatus.COMPLETED)
-        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(len(_to_carla()), 1)
 
     @patch(PAYMENTS_SDK)
     def test_no_email_unless_the_purchase_completes(self, mock_sdk):
@@ -143,7 +152,7 @@ class OfferingSaleNotificationTests(_WebhookClient, APITestCase):
         })
         with self.captureOnCommitCallbacks(execute=False) as callbacks:
             self._notify('mp-pay-1')
-        self.assertEqual(len(callbacks), 1)  # scheduled, but only runs on commit
+        self.assertEqual(len(callbacks), 2)  # Carla's + the buyer's; only run on commit
         self.assertEqual(mail.outbox, [])
 
 
@@ -177,8 +186,8 @@ class SubscriptionSaleNotificationTests(_WebhookClient, APITestCase):
         resp = self._charge(mock_sdk)
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(self.sub.status, SubscriptionStatus.ACTIVE)
-        self.assertEqual(len(mail.outbox), 1)
-        email = mail.outbox[0]
+        self.assertEqual(len(_to_carla()), 1)
+        email = _to_carla()[0]
         self.assertEqual(email.to, ['carla@example.com'])
         self.assertEqual(email.subject, 'Nueva suscripción: Plan Mensual — 55.000,00 ARS')
         for expected in (
@@ -193,14 +202,14 @@ class SubscriptionSaleNotificationTests(_WebhookClient, APITestCase):
         self._charge(mock_sdk)
         self._charge(mock_sdk, ap_id='ap-1-again')
         self.assertEqual(SubscriptionCharge.objects.count(), 1)
-        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(len(_to_carla()), 1)
 
     @patch(SUB_SDK)
     def test_renewal_charge_sends_a_renewal_email(self, mock_sdk):
         self._charge(mock_sdk)
         self._charge(mock_sdk, payment_id='pay-2', ap_id='ap-2')
-        self.assertEqual(len(mail.outbox), 2)
-        self.assertTrue(mail.outbox[1].subject.startswith('Renovación de suscripción: Plan Mensual'))
+        self.assertEqual(len(_to_carla()), 2)
+        self.assertTrue(_to_carla()[1].subject.startswith('Renovación de suscripción: Plan Mensual'))
 
     @patch(SUB_SDK)
     def test_no_email_for_charges_that_dont_activate(self, mock_sdk):
