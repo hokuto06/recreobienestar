@@ -29,6 +29,7 @@ NEVER creates a Subscription: a notification that doesn't map to an
 existing row (via mp_preapproval_id) is logged and dropped.
 """
 import logging
+import time
 from decimal import Decimal, InvalidOperation
 
 import mercadopago
@@ -50,6 +51,20 @@ PREAPPROVAL = 'subscription_preapproval'
 
 _APPROVED = 'approved'
 _FAILED = ('rejected', 'cancelled')
+
+# MP can notify a charge a few seconds BEFORE its own API can return it —
+# GET /authorized_payments/{id} answers 404 for a moment (production,
+# 02/10/2026: charge 7032483746, 404 at +5s, MP never retried our 502). So a
+# 404 — and only a 404 — is retried in-request after these delays. Worst
+# case: 1 + 2 + 4 = 7s of sleeping plus three extra (fast) 404 round trips,
+# well inside MP's webhook timeout. Other errors aren't retried here: the
+# SDK already retries 429/5xx itself, and auth/validation errors won't fix
+# themselves in seconds. If it's still 404 after the last attempt we return
+# 502 as before, and reconcile_subscription_charges is the safety net.
+# Overridable via settings.MP_AUTHORIZED_PAYMENT_LOOKUP_DELAYS (the test
+# settings use zeros, so the suite retries without sleeping).
+AUTHORIZED_PAYMENT_LOOKUP_DELAYS = (1, 2, 4)
+_sleep = time.sleep  # patched in tests that check the schedule
 
 
 def handle_subscription_notification(notification_type, data_id):
@@ -130,9 +145,7 @@ def process_authorized_payment(authorized_payment_id):
     """One recurring charge attempt. See module docstring for the trust
     model; see SubscriptionCharge for the idempotency ledger."""
     try:
-        result = _sdk().invoice().get(authorized_payment_id)
-        result.raise_for_status()
-        authorized_payment = result['response']
+        authorized_payment = _fetch_authorized_payment(authorized_payment_id)
     except Exception:
         logger.exception(
             'Mercado Pago webhook: authorized payment lookup failed for data.id=%s', authorized_payment_id,
@@ -221,6 +234,31 @@ def process_authorized_payment(authorized_payment_id):
         mp_payment_id, authorized_payment_id, subscription.id, subscription.status, charge.outcome,
     )
     return 200
+
+
+def _fetch_authorized_payment(authorized_payment_id):
+    """GET /authorized_payments/{id}, retrying ONLY while MP answers 404
+    (see AUTHORIZED_PAYMENT_LOOKUP_DELAYS). Raises on any other error, or
+    on a 404 that outlasts the retries — the caller turns that into 502."""
+    delays = tuple(getattr(settings, 'MP_AUTHORIZED_PAYMENT_LOOKUP_DELAYS', AUTHORIZED_PAYMENT_LOOKUP_DELAYS))
+    for attempt in range(len(delays) + 1):
+        result = _sdk().invoice().get(authorized_payment_id)
+        if result.get('status') == 404 and attempt < len(delays):
+            logger.info(
+                'Mercado Pago authorized payment %s not readable yet (404, attempt %d of %d) — '
+                'retrying in %ss',
+                authorized_payment_id, attempt + 1, len(delays) + 1, delays[attempt],
+            )
+            if delays[attempt]:
+                _sleep(delays[attempt])
+            continue
+        result.raise_for_status()
+        if attempt:
+            logger.info(
+                'Mercado Pago authorized payment %s readable after %d attempts',
+                authorized_payment_id, attempt + 1,
+            )
+        return result['response']
 
 
 def _decimal_or_none(value):
