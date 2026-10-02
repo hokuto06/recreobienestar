@@ -521,6 +521,32 @@ The webhook itself also retries a 404 on that lookup in-request (1s, 2s,
 4s) before answering 502 — the reconcile timer is the net for whatever
 still slips through.
 
+**Failed renewals and lapses (dunning).** A failed renewal keeps the
+subscription ACTIVE and stamps `grace_ends_at` (access continues). The
+member is emailed once when a grace period starts — MP's further retries
+within it come back `GRACE_RUNNING` and send nothing. When grace runs out
+with no payment the subscription becomes PAST_DUE (no access) and the member
+("suspendida") and Carla are emailed once: either the webhook does it (a
+failure arriving after grace) or, if MP just stops retrying,
+`lapse-recreobienestar.timer`/`.service` does, **daily at 12:20 UTC**
+(09:20 Argentina):
+
+    /usr/bin/docker exec recreo-django python manage.py lapse_overdue_subscriptions
+
+It only touches ACTIVE rows whose grace ended in the last 30 days and that
+are expired by date — already without access — so it changes no one's
+access. `--dry-run` reports without changing anything; output in
+`journalctl -u lapse-recreobienestar.service`. Same install steps as the
+other units in `deploy/systemd/`.
+
+**Not done on purpose — relabelling ended subscriptions as EXPIRED.** The
+Admin can show "Activa" for a subscription whose end date passed, but
+rewriting those rows to EXPIRED is NOT presentation-only: for an ACTIVE
+subscription past its end with no grace stamped, a late failed MP charge
+starts a grace period (access for `grace_days`), while an EXPIRED one is
+ignored (no access). Fix the Admin's display instead (e.g. show
+"Activa (vencida)" from the dates) if the label is the problem.
+
 ## 15. Known infrastructure constraints
 
 - **t2.micro, 954MB RAM, 0 swap.** Baseline OS/daemon overhead

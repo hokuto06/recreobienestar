@@ -39,7 +39,10 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from common.choices import SubscriptionStatus
-from common.notifications import schedule_subscription_charge_notification
+from common.notifications import (
+    schedule_grace_started_notification, schedule_lapse_notification,
+    schedule_subscription_charge_notification,
+)
 
 from .models import Subscription, SubscriptionCharge, SubscriptionChargeOutcome
 from .services import paid_period_end, supersede_active_trial
@@ -203,6 +206,7 @@ def process_authorized_payment(authorized_payment_id):
         charge.amount = _decimal_or_none(authorized_payment.get('transaction_amount'))
         charge.currency = (authorized_payment.get('currency_id') or '')[:3]
         now = timezone.now()
+        status_before = subscription.status
 
         if _amount_mismatches(subscription, authorized_payment):
             logger.error(
@@ -225,6 +229,19 @@ def process_authorized_payment(authorized_payment_id):
             # Email to Carla, sent only after this transaction commits and
             # unable to affect it — see common/notifications.py.
             schedule_subscription_charge_notification(charge.pk)
+        elif charge.outcome == SubscriptionChargeOutcome.GRACE_STARTED:
+            # Only when a grace period actually STARTS: MP's further retries
+            # within the same grace come back GRACE_RUNNING and send nothing.
+            schedule_grace_started_notification(subscription.pk)
+        elif (
+            charge.outcome == SubscriptionChargeOutcome.PAST_DUE
+            and status_before == SubscriptionStatus.ACTIVE
+        ):
+            # The ACTIVE -> PAST_DUE transition itself (a failure arriving
+            # after grace ran out), never a failure on an already-PAST_DUE
+            # row. The daily lapse command covers the case where MP simply
+            # stops retrying.
+            schedule_lapse_notification(subscription.pk)
         subscription.last_charge_payment_id = mp_payment_id
         subscription.last_charge_status = mp_payment_status
         subscription.save()

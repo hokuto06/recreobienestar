@@ -7,6 +7,14 @@ Sale emails, two per sale:
 The two are separate after-commit callbacks: one failing never stops the
 other.
 
+Plus the dunning emails (same machinery, same guarantees):
+  - grace started (a renewal charge failed): to the member — they keep
+    access until grace_ends_at, update the card AT MERCADO PAGO;
+  - access lapsed (grace ran out, ACTIVE -> PAST_DUE): to the member AND
+    to Carla, as two independent callbacks.
+Both fire only on the state TRANSITION, never on a repeat (see the callers
+in memberships/webhooks.py and lapse_overdue_subscriptions).
+
 The payment code only ever calls the two schedule_* functions, from the
 single point where each sale is settled:
 
@@ -71,6 +79,18 @@ def schedule_subscription_charge_notification(charge_id):
     two independent callbacks."""
     _after_commit(notify_subscription_charge, charge_id)
     _after_commit(notify_buyer_subscription_charge, charge_id)
+
+
+def schedule_grace_started_notification(subscription_id):
+    """Call from inside the transaction that stamps a NEW grace period."""
+    _after_commit(notify_member_grace_started, subscription_id)
+
+
+def schedule_lapse_notification(subscription_id):
+    """Call from inside the transaction that flips ACTIVE -> PAST_DUE.
+    Member's notice and Carla's, as two independent callbacks."""
+    _after_commit(notify_member_access_lapsed, subscription_id)
+    _after_commit(notify_carla_access_lapsed, subscription_id)
 
 
 def _after_commit(func, object_id):
@@ -274,6 +294,111 @@ def notify_buyer_subscription_charge(charge_id):
         )
 
 
+# ── Dunning (run after commit; never raise) ────────────────────────────
+
+
+def _subscription(subscription_id):
+    from memberships.models import Subscription
+
+    return (
+        Subscription.objects.select_related('plan', 'user', 'user__profile')
+        .get(pk=subscription_id)
+    )
+
+
+def notify_member_grace_started(subscription_id):
+    try:
+        subscription = _subscription(subscription_id)
+        user = subscription.user
+        if not _has_email(user, f'grace notice for Subscription {subscription_id}'):
+            return
+        plan = subscription.plan
+        amount = _money(subscription.amount if subscription.amount is not None else plan.price,
+                        subscription.currency or plan.currency)
+        until = _day(subscription.grace_ends_at) if subscription.grace_ends_at else 'dentro de unos días'
+        lines = [
+            f'Hola {_first_name(user)},',
+            '',
+            f'Mercado Pago no pudo cobrar la renovación de tu membresía {plan.name} ({amount}). '
+            f'No te preocupes: seguís teniendo acceso a todos tus videos hasta el {until}.',
+            '',
+            'Para que no se corte, revisá el medio de pago en tu cuenta de Mercado Pago: la tarjeta '
+            'se maneja ahí, no en Recreo Bienestar. Entrá a Mercado Pago (la app o la web), buscá tu '
+            'suscripción a Recreo Bienestar y actualizá la tarjeta o el medio de pago.',
+            '',
+            'Mercado Pago va a volver a intentar el cobro automáticamente en los próximos días. '
+            'Si se acredita, no tenés que hacer nada más.',
+            '',
+            'Podés ver el estado de tu membresía (y cancelarla, si preferís) acá:',
+            _url('memberships:mi_suscripcion'),
+            *_signature(),
+        ]
+        _send_to_buyer(user, f'No pudimos cobrar tu membresía {plan.name}', lines)
+    except Exception:
+        logger.exception(
+            'Grace notice for Subscription %s failed to send — the subscription itself is unaffected',
+            subscription_id,
+        )
+
+
+def notify_member_access_lapsed(subscription_id):
+    try:
+        subscription = _subscription(subscription_id)
+        user = subscription.user
+        if not _has_email(user, f'lapse notice for Subscription {subscription_id}'):
+            return
+        plan = subscription.plan
+        lines = [
+            f'Hola {_first_name(user)},',
+            '',
+            f'Como no se pudo cobrar la renovación de tu membresía {plan.name}, quedó suspendida '
+            'y ya no tenés acceso a los videos del plan.',
+            '',
+            'Si el cobro se acredita más adelante, tu acceso se reactiva solo. Y si querés volver '
+            'eligiendo un plan de nuevo, me encantaría seguir acompañándote:',
+            f'{settings.SITE_URL}/#columna-sana',
+            '',
+            'Tu cuenta:',
+            _url('accounts:dashboard'),
+            *_signature(),
+        ]
+        _send_to_buyer(user, f'Tu membresía {plan.name} quedó suspendida', lines)
+    except Exception:
+        logger.exception(
+            'Lapse notice to member for Subscription %s failed to send — the subscription itself is '
+            'unaffected', subscription_id,
+        )
+
+
+def notify_carla_access_lapsed(subscription_id):
+    try:
+        subscription = _subscription(subscription_id)
+        plan = subscription.plan
+        amount = _money(subscription.amount if subscription.amount is not None else plan.price,
+                        subscription.currency or plan.currency)
+        name = _buyer(subscription.user)
+        lines = [
+            'Se suspendió una membresía: no se pudo cobrar la renovación y terminó el período de gracia.',
+            '',
+            f'Miembro: {name}',
+            f'Plan: {plan.name}',
+            f'Monto: {amount}',
+        ]
+        if subscription.grace_ends_at:
+            lines.append(f'Gracia hasta: {_when(subscription.grace_ends_at)}')
+        lines += [
+            f'Referencia: suscripción #{subscription.pk}',
+            '',
+            'Quizás quieras escribirle para ver si necesita una mano con el pago.',
+        ]
+        _send(f'Membresía suspendida por falta de pago: {plan.name} — {name}', lines)
+    except Exception:
+        logger.exception(
+            'Lapse notice to Carla for Subscription %s failed to send — the subscription itself is '
+            'unaffected', subscription_id,
+        )
+
+
 # ── Helpers ────────────────────────────────────────────────────────────
 
 
@@ -367,6 +492,10 @@ def _buyer(user):
 
 def _when(moment):
     return timezone.localtime(moment).strftime('%d/%m/%Y %H:%M') + ' (hora de Argentina)'
+
+
+def _day(moment):
+    return timezone.localtime(moment).strftime('%d/%m/%Y')
 
 
 def _mp_ref(mp_payment_id):
