@@ -1,6 +1,11 @@
 """
-"You made a sale" emails to Carla — one per completed OfferingPurchase and
-one per confirmed subscription charge (first activation or renewal).
+Sale emails, two per sale:
+  - to Carla: "you made a sale" (one per completed OfferingPurchase and one
+    per confirmed subscription charge — first activation or renewal);
+  - to the buyer: a confirmation with how to access what they bought (a
+    welcome for a subscription's first charge, shorter copy for renewals).
+The two are separate after-commit callbacks: one failing never stops the
+other.
 
 The payment code only ever calls the two schedule_* functions, from the
 single point where each sale is settled:
@@ -20,7 +25,7 @@ AN EMAIL CAN NEVER BREAK A SALE. Three independent layers:
      anything that still escaped — an SMTP failure never reaches the
      webhook's response.
 A failed email is logged (logger.exception) and not retried; the sale
-stands either way.
+stands either way. A buyer with no email address is skipped and logged.
 
 NO DUPLICATES: neither call site is reachable twice for the same sale.
 Each sits after the payment code's own idempotency guard, which runs under
@@ -30,8 +35,10 @@ one notification that actually performs the transition schedules an email;
 MP's retries/duplicates don't. No extra state needed.
 
 Content is deliberately minimal: what was sold, amount + currency, buyer
-name and email, when, and our/Mercado Pago's reference numbers so Carla
-can find it in the Admin or in MP. No tokens, card or payer data.
+name and email (Carla's copy only), when, and our/Mercado Pago's reference
+numbers. No tokens, card or payer data, no preference id. Links in the
+buyer's email are absolute (settings.SITE_URL) — they're opened from an
+email client, not the site.
 """
 import logging
 from decimal import Decimal
@@ -39,8 +46,9 @@ from email.utils import parseaddr
 from functools import partial
 
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import EmailMessage, send_mail
 from django.db import transaction
+from django.urls import reverse
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -50,13 +58,19 @@ logger = logging.getLogger(__name__)
 
 
 def schedule_offering_sale_notification(purchase_id):
-    """Call from inside the transaction that marks the purchase COMPLETED."""
+    """Call from inside the transaction that marks the purchase COMPLETED.
+    Schedules Carla's notification and the buyer's confirmation as two
+    independent callbacks."""
     _after_commit(notify_offering_sale, purchase_id)
+    _after_commit(notify_buyer_offering_purchase, purchase_id)
 
 
 def schedule_subscription_charge_notification(charge_id):
-    """Call from inside the transaction that records an ACTIVATED charge."""
+    """Call from inside the transaction that records an ACTIVATED charge.
+    Schedules Carla's notification and the subscriber's confirmation as
+    two independent callbacks."""
     _after_commit(notify_subscription_charge, charge_id)
+    _after_commit(notify_buyer_subscription_charge, charge_id)
 
 
 def _after_commit(func, object_id):
@@ -109,10 +123,7 @@ def notify_subscription_charge(charge_id):
             .get(pk=charge_id)
         )
         subscription = charge.subscription
-        is_first = not subscription.charges.filter(
-            outcome=SubscriptionChargeOutcome.ACTIVATED,
-        ).exclude(pk=charge.pk).exists()
-        kind = 'Nueva suscripción' if is_first else 'Renovación de suscripción'
+        kind = 'Nueva suscripción' if _is_first_charge(charge) else 'Renovación de suscripción'
         amount = charge.amount if charge.amount is not None else subscription.amount
         currency = charge.currency or subscription.currency
         lines = [
@@ -134,7 +145,148 @@ def notify_subscription_charge(charge_id):
         )
 
 
+# ── Buyer confirmations (run after commit; never raise) ────────────────
+
+
+def notify_buyer_offering_purchase(purchase_id):
+    try:
+        from payments.models import OfferingPurchase
+
+        purchase = (
+            OfferingPurchase.objects.select_related('offering', 'user', 'user__profile')
+            .get(pk=purchase_id)
+        )
+        if not _has_email(purchase.user, f'OfferingPurchase {purchase_id}'):
+            return
+        offering = purchase.offering
+        amount = purchase.amount if purchase.amount is not None else offering.price
+        currency = purchase.currency or offering.currency
+        lines = [
+            f'Hola {_first_name(purchase.user)},',
+            '',
+            f'¡Gracias por tu compra! Ya tenés acceso a «{offering.name}».',
+            '',
+            'Para empezar, entrá a tu cuenta: los videos están en «Disponibles para vos».',
+            _url('accounts:dashboard'),
+            '',
+            'También los encontrás en la videoteca:',
+            _url('catalog:video_library'),
+            '',
+            'Detalle de tu compra',
+            f'· {offering.name}',
+            f'· {_money(amount, currency)}',
+            f'· {_when(purchase.updated_at)}',
+        ]
+        if purchase.mp_payment_id:
+            lines.append(f'· Referencia de pago (Mercado Pago): {purchase.mp_payment_id}')
+        lines += _signature()
+        _send_to_buyer(purchase.user, f'Tu compra en Recreo Bienestar: {offering.name}', lines)
+    except Exception:
+        logger.exception(
+            'Buyer confirmation for OfferingPurchase %s failed to send — the sale itself is unaffected',
+            purchase_id,
+        )
+
+
+def notify_buyer_subscription_charge(charge_id):
+    try:
+        from common.choices import SubscriptionStatus
+        from memberships.models import SubscriptionCharge
+        from memberships.services import billing_cadence_for_plan
+
+        charge = (
+            SubscriptionCharge.objects
+            .select_related('subscription__plan', 'subscription__user', 'subscription__user__profile')
+            .get(pk=charge_id)
+        )
+        subscription = charge.subscription
+        user = subscription.user
+        if not _has_email(user, f'SubscriptionCharge {charge_id}'):
+            return
+        plan = subscription.plan
+        amount = charge.amount if charge.amount is not None else subscription.amount
+        currency = charge.currency or subscription.currency
+        details = [
+            f'· Plan: {plan.name}',
+            f'· Monto: {_money(amount, currency)}',
+            f'· Fecha del cobro: {_when(charge.updated_at)}',
+        ]
+        if subscription.ends_at:
+            details.append(f'· Acceso pago hasta: {_when(subscription.ends_at)}')
+        if charge.mp_payment_id:
+            details.append(f'· Referencia de pago (Mercado Pago): {charge.mp_payment_id}')
+
+        cancelled = subscription.status == SubscriptionStatus.CANCELLED
+        if cancelled:
+            # A charge already in flight when they cancelled: it still buys
+            # the period, but nothing renews — never tell them it will.
+            renewal = [
+                'Tu suscripción está cancelada, así que no va a haber nuevos cobros: '
+                'mantenés el acceso hasta la fecha de arriba.',
+            ]
+        else:
+            renewal = [
+                f'Tu membresía se renueva automáticamente {_cadence(billing_cadence_for_plan(plan))} '
+                'con un cobro de Mercado Pago, hasta que la canceles. Podés cancelarla cuando '
+                'quieras desde:',
+                _url('memberships:mi_suscripcion'),
+            ]
+
+        if _is_first_charge(charge):
+            subject = f'¡Te damos la bienvenida a {plan.name}!'
+            lines = [
+                f'Hola {_first_name(user)},',
+                '',
+                f'¡Qué alegría que te sumes! Tu membresía {plan.name} ya está activa.',
+                '',
+                'Ya podés ver todos los videos de tu plan en la videoteca:',
+                _url('catalog:video_library'),
+                '',
+                'Y en tu cuenta tenés tus videos disponibles y tu progreso:',
+                _url('accounts:dashboard'),
+                '',
+                'Detalle',
+                *details,
+                '',
+                *renewal,
+            ]
+        else:
+            subject = f'Renovamos tu membresía {plan.name}'
+            lines = [
+                f'Hola {_first_name(user)},',
+                '',
+                f'Se acreditó la renovación de tu membresía {plan.name}. '
+                'Gracias por seguir practicando conmigo.',
+                '',
+                *details,
+                '',
+                *(renewal[:1] if cancelled else []),
+                f'Tus videos te esperan en {_url("catalog:video_library")}',
+                f'Tu suscripción: {_url("memberships:mi_suscripcion")}' if cancelled
+                else f'Para ver o cancelar tu suscripción: {_url("memberships:mi_suscripcion")}',
+            ]
+        lines += _signature()
+        _send_to_buyer(user, subject, lines)
+    except Exception:
+        logger.exception(
+            'Buyer confirmation for SubscriptionCharge %s failed to send — the sale itself is unaffected',
+            charge_id,
+        )
+
+
 # ── Helpers ────────────────────────────────────────────────────────────
+
+
+def _is_first_charge(charge):
+    """True when no OTHER charge of the same subscription was ACTIVATED —
+    i.e. this charge started the subscription; anything after is a
+    renewal. Per subscription: a member who cancels and later subscribes
+    again starts a new Subscription row and gets the welcome again."""
+    from memberships.models import SubscriptionChargeOutcome
+
+    return not charge.subscription.charges.filter(
+        outcome=SubscriptionChargeOutcome.ACTIVATED,
+    ).exclude(pk=charge.pk).exists()
 
 
 def sale_notification_recipient():
@@ -153,6 +305,50 @@ def sale_notification_recipient():
 def _send(subject, lines):
     body = '\n'.join(['Hola,', ''] + lines + ['', '— Recreo Bienestar (aviso automático)', ''])
     send_mail(subject, body, None, [sale_notification_recipient()], fail_silently=False)
+
+
+def _has_email(user, context):
+    if user.email:
+        return True
+    logger.warning('Buyer confirmation for %s skipped: user %s has no email address', context, user.pk)
+    return False
+
+
+def _send_to_buyer(user, subject, lines):
+    # Replies go to Carla's own address (SiteSettings.contact_email, ...),
+    # not just the sending Gmail account.
+    EmailMessage(
+        subject, '\n'.join(lines) + '\n', None, [user.email],
+        reply_to=[sale_notification_recipient()],
+    ).send(fail_silently=False)
+
+
+def _first_name(user):
+    profile = getattr(user, 'profile', None)
+    name = (profile.display_name if profile else '') or user.first_name or user.get_username()
+    return name.split()[0] if name.strip() else name
+
+
+def _url(name):
+    return f'{settings.SITE_URL}{reverse(name)}'
+
+
+def _cadence(cadence):
+    if cadence == (1, 'months'):
+        return 'cada mes'
+    if cadence == (12, 'months'):
+        return 'cada año'
+    return 'al final de cada período'
+
+
+def _signature():
+    return [
+        '',
+        'Si tenés cualquier duda, respondé este mail y te contesto.',
+        '',
+        'Un abrazo,',
+        'Carla — Recreo Bienestar',
+    ]
 
 
 def _money(amount, currency):

@@ -231,6 +231,9 @@ SERVER_EMAIL = DEFAULT_FROM_EMAIL
 # Carla in the Admin) is empty. Optional; falls back to DEFAULT_FROM_EMAIL's
 # inbox — see common.notifications.sale_notification_recipient.
 SALE_NOTIFICATION_EMAIL = env('SALE_NOTIFICATION_EMAIL', default='')
+# Absolute base for links inside emails (no request to build them from in a
+# webhook). No trailing slash.
+SITE_URL = env('SITE_URL', default='https://recreobienestar.com').rstrip('/')
 
 # ── Mercado Pago (Phase 4B-1: checkout initiation, sandbox) ───────────────
 # Same env('...') pattern as SECRET_KEY/DB_PASSWORD above — no default, so
