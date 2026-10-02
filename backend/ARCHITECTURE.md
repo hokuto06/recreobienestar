@@ -412,13 +412,16 @@ committed.
 | `ADMIN_URL` | mount point for Django Admin, default `gestion/` |
 | `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT` | Postgres connection |
 | `DJANGO_SECURE_SSL_REDIRECT` | `True` in production; nginx terminates TLS and forwards `X-Forwarded-Proto` |
+| `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` | Gmail SMTP login (`recreobienestar@gmail.com` + an app password). **Required** while `EMAIL_BACKEND` is SMTP (the default) — the app won't start without them |
+| `EMAIL_BACKEND`, `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USE_TLS`, `EMAIL_TIMEOUT` | optional; default SMTP / `smtp.gmail.com` / 587 / `True` / 10s. Local dev sets `EMAIL_BACKEND` to the console backend |
+| `DEFAULT_FROM_EMAIL` | optional; default `Recreo Bienestar <recreobienestar@gmail.com>` |
+| `SALE_NOTIFICATION_EMAIL` | optional; sale notifications go to SiteSettings.contact_email, else this, else `DEFAULT_FROM_EMAIL` |
 
 No new variables in Phase 2b. `STATIC_URL`/`MEDIA_URL` moved from
 `/gestion/static//media/` to top-level `/static/`/`/media/` (harmless —
-nginx was never reloaded with the old paths live). `EMAIL_BACKEND` is
-hardcoded to the console backend (not env-configurable) since real email
-is explicitly out of scope this phase — see
-`deploy/PHASE2B_DELIVERABLES.md` §12 for what production email will need.
+nginx was never reloaded with the old paths live). Email was console-only
+until the SMTP phase; it is now real SMTP via Gmail (variables above), and
+tests always use Django's locmem backend.
 
 ## 14. Backup and restore flow
 

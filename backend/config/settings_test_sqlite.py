@@ -6,7 +6,15 @@ image's entrypoint always uses config.settings (Postgres).
 Usage:
     DJANGO_SETTINGS_MODULE=config.settings_test_sqlite python manage.py test
 """
-from .settings import *  # noqa: F401,F403
+import os
+
+# Before importing settings: with the SMTP backend selected, settings.py
+# REQUIRES EMAIL_HOST_USER/EMAIL_HOST_PASSWORD. Forcing locmem here (not
+# setdefault — a developer's .env saying "smtp" must not win) means tests
+# and local checks never need, and can never use, real SMTP credentials.
+os.environ['EMAIL_BACKEND'] = 'django.core.mail.backends.locmem.EmailBackend'
+
+from .settings import *  # noqa: E402,F401,F403
 
 DATABASES = {
     'default': {
@@ -20,6 +28,10 @@ DATABASES = {
 # SECURE_SSL_REDIRECT would 301 every single test request. Real
 # production config (config.settings) is untouched.
 SECURE_SSL_REDIRECT = False
+
+# Never real SMTP from tests or local checks (Django's test runner also
+# forces locmem — this makes it true for manage.py check/shell too).
+EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
 
 # CompressedManifestStaticFilesStorage requires collectstatic to have run
 # (entrypoint.sh does this before gunicorn starts, in production). Test
