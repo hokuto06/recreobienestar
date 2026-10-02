@@ -1,19 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Mi cuenta | Recreo Bienestar{% endblock %}
 {% block content %}
+{# Compact account strip: the logo is already in the site header above and #}
+{# the greeting is the "Tu espacio" heading below — not repeated here.    #}
 <header class="member-header">
   <div class="container member-bar">
-    <a href="/" class="logo">
-      <span class="logo-mark" aria-hidden="true">R</span>
-      Recreo Bienestar
-    </a>
     <div class="member-user">
       <div class="testimonial-avatar" aria-hidden="true">{{ profile.name_for_display|first|upper }}</div>
-      <div>
-        <div class="name">Hola, {{ profile.name_for_display }}</div>
-        <div class="plan-label">
-          {% if subscription %}{{ subscription.plan.name }}{% else %}Plan gratuito{% endif %}
-        </div>
+      <div class="plan-label">
+        {% if subscription %}{{ subscription.plan.name }}{% else %}Plan gratuito{% endif %}
       </div>
       <a class="btn btn-ghost btn-sm" href="{% url 'accounts:profile_edit' %}">Editar perfil</a>
     </div>
