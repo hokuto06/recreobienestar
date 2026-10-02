@@ -1224,13 +1224,24 @@ p.quote { font-size: 1.3rem; font-weight: 300; font-style: italic; color: var(--
 }
 .member-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-3) var(--space-4);
   padding-block: var(--space-3);
 }
-.member-user { display: flex; align-items: center; gap: 0.7rem; }
+.member-user { display: flex; align-items: center; gap: 0.7rem; min-width: 0; }
+.member-user > div { min-width: 0; }
 .member-user .testimonial-avatar { width: 44px; height: 44px; }
-.member-user .name { font-weight: 600; font-size: 0.95rem; }
+.member-user .name { font-weight: 600; font-size: 0.95rem; overflow-wrap: anywhere; }
+/* Celular: logo arriba y, debajo, la fila de la miembra a todo el ancho
+   con "Editar perfil" contra el borde derecho — antes era una sola fila
+   que no entraba y cortaba el botón. Un nombre largo hace wrap en vez de
+   empujar el botón afuera. */
+@media (max-width: 620px) {
+  .member-user { flex: 1 1 100%; }
+  .member-user .btn { margin-left: auto; flex-shrink: 0; }
+}
 .member-user .plan-label { font-size: 0.78rem; color: var(--color-gold); }
 
 .member-hero {
