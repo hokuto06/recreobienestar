@@ -1,0 +1,14 @@
+# See reconcile-recreobienestar.service for installation steps.
+#
+# Every 30 minutes at :10 and :40 — offset from backup-recreobienestar
+# (02:15 + up to 10 min) and certbot-recreobienestar (03:00/15:00), so
+# none of them run at the same moment. A run takes about a second.
+[Unit]
+Description=Run the recreo-bienestar subscription-charge reconcile every 30 minutes
+
+[Timer]
+OnCalendar=*-*-* *:10/30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

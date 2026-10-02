@@ -489,6 +489,38 @@ itself) — row counts for `auth_user`, `catalog_video`,
 `catalog_category`, and `memberships_membershipplan` matched the live
 database exactly before this was trusted as a working backup.
 
+**Subscription-charge reconcile** (added after the 02/10/2026 incident:
+Mercado Pago notified a first charge before its own API could return it,
+our lookup got a 404, MP never retried our 502, and a paying member stayed
+PENDING with no access until the charge was replayed by hand).
+`reconcile-recreobienestar.timer`/`.service` (sources in
+`deploy/systemd/`, installed at `/etc/systemd/system/`, same install steps
+as the backup units) runs every **30 minutes, at :10 and :40** (offset from
+the 02:15 backup and the 03:00/15:00 certbot renewal):
+
+    /usr/bin/docker exec recreo-django python manage.py reconcile_subscription_charges
+
+It looks at paid-plan subscriptions created in the last 7 days that are
+still PENDING with no activated charge, asks MP for their charges, and
+applies any approved one through `memberships.webhooks.
+process_authorized_payment` — the webhook's own function (re-fetch,
+amount check, activation, both emails). Idempotent and normally a no-op; a
+never-paid signup is reported as "no approved charge at MP — left pending"
+and left alone. It runs **without** `--dry-run` on purpose (it must be able
+to fix a stranded member). The unit calls `/usr/bin/docker` directly, not a
+repo script, so a file-mode change on deploy can't break it the way it
+broke the backup. Runs as `ubuntu` (member of the `docker` group).
+
+- Output: `journalctl -u reconcile-recreobienestar.service` — one
+  timestamped line per candidate plus a summary line per run.
+- Schedule/next run: `systemctl list-timers reconcile-recreobienestar.timer`.
+- By hand, changing nothing: `docker exec recreo-django python manage.py
+  reconcile_subscription_charges --dry-run` (`--days N` widens the window).
+
+The webhook itself also retries a 404 on that lookup in-request (1s, 2s,
+4s) before answering 502 — the reconcile timer is the net for whatever
+still slips through.
+
 ## 15. Known infrastructure constraints
 
 - **t2.micro, 954MB RAM, 0 swap.** Baseline OS/daemon overhead
