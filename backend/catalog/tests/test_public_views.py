@@ -1,4 +1,8 @@
 from datetime import timedelta
+from pathlib import Path
+from unittest import skipUnless
+
+from django.conf import settings
 
 from django.contrib.auth import get_user_model
 from django.db import connection
@@ -11,6 +15,9 @@ from catalog.models import Category, Program, Video
 from memberships.models import MembershipPlan, Subscription
 
 User = get_user_model()
+
+# The static home page lives at the repo root, one level above backend/.
+HOME_PAGE = Path(settings.BASE_DIR).parent / 'index.html'
 
 
 class VideoDetailAccessTests(TestCase):
@@ -47,6 +54,27 @@ class VideoDetailAccessTests(TestCase):
         resp = self.client.get(self._detail_url(self.paid_video))
         self.assertEqual(resp.status_code, 403)
         self.assertTemplateUsed(resp, 'catalog/video_locked.html')
+
+    def test_locked_page_links_to_membership_section_anchor(self):
+        """"Ver planes de membresía" must target an anchor that exists on
+        the home page — it used to point at /#membresias, which didn't, so
+        it just dropped the visitor at the top of the home."""
+        user = User.objects.create_user(username='gratis2', password='x')
+        self.client.force_login(user)
+        resp = self.client.get(self._detail_url(self.paid_video))
+        self.assertContains(resp, 'href="/#columna-sana"', status_code=403)
+        self.assertNotContains(resp, '#membresias', status_code=403)
+
+    @skipUnless(HOME_PAGE.exists(), 'static site (repo root) not present, e.g. inside the image')
+    def test_membership_anchor_is_the_pricing_cards_section(self):
+        """The anchor must exist AND be the section holding the pricing
+        cards (data-plans-mount, filled from /api/plans/) — not a video
+        block like #videoteca right above it."""
+        html = HOME_PAGE.read_text(encoding='utf-8')
+        start = html.index('id="columna-sana"')
+        section = html[start:html.index('</section>', start)]
+        self.assertIn('data-plans-mount', section)
+        self.assertNotIn('data-videos-mount', section)
 
     # ── active / expired ─────────────────────────────────────────────
     def test_active_plan_grants_access(self):

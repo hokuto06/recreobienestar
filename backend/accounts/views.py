@@ -14,7 +14,12 @@ from django.contrib.auth.views import (
 )
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import never_cache
 from django.views.generic import CreateView, ListView, UpdateView
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from catalog.models import Favorite, Video
 from catalog.services import get_continue_watching, get_favorited_video_ids, get_progress_map
@@ -30,6 +35,27 @@ from payments.models import OfferingPurchase
 
 from .forms import EmailOrUsernameAuthenticationForm, ProfileForm, RegistrationForm
 from .models import Profile
+
+
+@method_decorator(never_cache, name='dispatch')
+class SessionStateView(APIView):
+    """GET /api/session/ — whether the visitor has a member session, for the
+    static home page's nav (index.html is served by nginx and can't know
+    on its own). Returns ONLY {"authenticated": bool}: the nav's logged-in
+    control is a fixed "Mi cuenta" link, so nothing about the user — name,
+    email, id, subscription — is needed and none of it is exposed.
+
+    Caching: this is the one /api/ response that differs per visitor, and
+    CloudFront's /api/* cache key does NOT include cookies. never_cache
+    marks it no-store here, but nginx strips Django's Cache-Control
+    (proxy_hide_header, server level) — the no-store that actually reaches
+    CloudFront/the browser comes from nginx's own `location = /api/session/`
+    block. Both must stay.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response({'authenticated': request.user.is_authenticated})
 
 
 class RegisterView(CreateView):

@@ -1,19 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Mi cuenta | Recreo Bienestar{% endblock %}
 {% block content %}
+{# Compact account strip: the logo is already in the site header above and #}
+{# the greeting is the "Tu espacio" heading below — not repeated here.    #}
 <header class="member-header">
   <div class="container member-bar">
-    <a href="/" class="logo">
-      <span class="logo-mark" aria-hidden="true">R</span>
-      Recreo Bienestar
-    </a>
     <div class="member-user">
       <div class="testimonial-avatar" aria-hidden="true">{{ profile.name_for_display|first|upper }}</div>
-      <div>
-        <div class="name">Hola, {{ profile.name_for_display }}</div>
-        <div class="plan-label">
-          {% if subscription %}{{ subscription.plan.name }}{% else %}Plan gratuito{% endif %}
-        </div>
+      <div class="plan-label">
+        {% if subscription %}{{ subscription.plan.name }}{% else %}Plan gratuito{% endif %}
       </div>
       <a class="btn btn-ghost btn-sm" href="{% url 'accounts:profile_edit' %}">Editar perfil</a>
     </div>
@@ -81,7 +76,7 @@
           {# EXPIRED without ever being charged (MP failed at signup, or the pending signup was cancelled) — not a lapsed membership. #}
           <h3 style="margin-top:0.6rem">{{ subscription.plan.name }}</h3>
           <p style="color:var(--color-text-muted);font-size:0.9rem" data-never-paid-notice>No pudimos procesar tu suscripción.</p>
-          <a class="btn btn-primary btn-block" href="/#membresias" style="margin-top:1rem">Ver planes de membresía</a>
+          <a class="btn btn-primary btn-block" href="/#columna-sana" style="margin-top:1rem">Ver planes de membresía</a>
         {% else %}
           {% if subscription %}
             <h3 style="margin-top:0.6rem">{{ subscription.plan.name }}</h3>
@@ -111,7 +106,7 @@
             {# Nothing to renew yet: Mercado Pago hasn't confirmed the payment. #}
             <p data-pending-payment-notice style="color:var(--color-text-muted);font-size:0.9rem;margin-top:1rem">Estamos confirmando tu pago. Puede tardar unos minutos.</p>
           {% elif not membership_is_active %}
-            <a class="btn btn-primary btn-block" href="/#membresias" style="margin-top:1rem">
+            <a class="btn btn-primary btn-block" href="/#columna-sana" style="margin-top:1rem">
               {% if subscription %}Renovar membresía{% else %}Ver planes de membresía{% endif %}
             </a>
           {% endif %}

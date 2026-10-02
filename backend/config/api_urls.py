@@ -1,6 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
+from accounts.views import SessionStateView
 from catalog.views import CategoryListView, ProgramListView, VideoViewSet
 from memberships.views import (
     CancelSubscriptionView, MembershipPlanListView, StartSubscriptionView, StartTrialView,
@@ -20,6 +21,9 @@ urlpatterns = [
     path('offerings/', OfferingListView.as_view(), name='offering-list'),
     path('testimonials/', TestimonialListView.as_view(), name='testimonial-list'),
     path('site-settings/', SiteSettingsView.as_view(), name='site-settings'),
+    # Per-visitor (logged in or not) — must never be cached; see
+    # SessionStateView's docstring and nginx's `location = /api/session/`.
+    path('session/', SessionStateView.as_view(), name='session-state'),
     # The non-read-only endpoints under /api/. contacto is anonymous (see
     # ContactMessageCreateView's docstring for why that's safe without
     # session auth/CSRF); checkout is authenticated-only (see

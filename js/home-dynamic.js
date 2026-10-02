@@ -2,7 +2,7 @@
  * Recreo Bienestar — contenido dinámico de la portada.
  * Vanilla JS, sin dependencias. Lee del API de solo lectura ya existente
  * (/api/programs/, /api/videos/, /api/plans/, /api/offerings/,
- * /api/site-settings/) para que Programas, Videoteca, Membresías,
+ * /api/site-settings/, /api/session/) para que Programas, Videoteca, Membresías,
  * Propuestas, el hero, la bio de Carla, el podcast y los datos de
  * contacto reflejen siempre lo que Carla carga en el Admin, en vez de
  * contenido de muestra escrito a mano en este HTML.
@@ -30,11 +30,42 @@
     mount.innerHTML = '<p class="placeholder-note">' + esc(message) + '</p>';
   }
 
+  // Every content fetch, so the hash re-alignment at the bottom of this
+  // file knows when the sections have finished filling in.
+  var pendingContent = [];
+
   function fetchJSON(url) {
-    return fetch(url, { headers: { 'Accept': 'application/json' } }).then(function (resp) {
+    var request = fetch(url, { headers: { 'Accept': 'application/json' } }).then(function (resp) {
       if (!resp.ok) { throw new Error('bad response: ' + resp.status); }
       return resp.json();
     });
+    pendingContent.push(request);
+    return request;
+  }
+
+  /* ---------- Botón de cuenta (nav + footer) ----------
+     index.html lo sirve nginx como archivo estático, así que no sabe si
+     hay sesión: arranca siempre como "Ingresar" y, si /api/session/
+     confirma una sesión, pasa a "Mi cuenta". Ante cualquier error queda
+     como estaba (fail safe). cache: 'no-store' para que el navegador
+     nunca reutilice una respuesta de otra sesión. */
+  var accountLinks = document.querySelectorAll('[data-account-link]');
+  if (accountLinks.length) {
+    fetch('/api/session/', {
+      headers: { 'Accept': 'application/json' },
+      credentials: 'same-origin',
+      cache: 'no-store',
+    }).then(function (resp) {
+      if (!resp.ok) { throw new Error('bad response: ' + resp.status); }
+      return resp.json();
+    }).then(function (data) {
+      if (!data || data.authenticated !== true) { return; }
+      accountLinks.forEach(function (link) {
+        link.setAttribute('href', '/mi-cuenta/');
+        var label = link.querySelector('[data-account-label]');
+        if (label) { label.textContent = 'Mi cuenta'; }
+      });
+    }).catch(function () { /* sin sesión confirmada: queda "Ingresar" */ });
   }
 
   /* ---------- Programas ---------- */
@@ -435,4 +466,48 @@
     // respaldo ya presente en el HTML (headline/bio por defecto, podcast
     // oculto) — no hay nada roto que mostrarle a quien visita.
   });
+
+  /* ---------- Llegada con #ancla (p. ej. /#columna-sana) ----------
+     El navegador salta al ancla apenas carga el HTML, cuando las
+     secciones de arriba (Propuestas, Videoteca) todavía muestran
+     "Cargando…". Al llenarse crecen ~1300px y empujan el destino hacia
+     abajo: quien venía a "Ver planes de membresía" terminaba mirando los
+     videos de muestra de la Videoteca. Cuando todo el contenido ya se
+     pintó (y sus imágenes cargaron), se vuelve a alinear con el ancla —
+     salvo que la persona ya haya scrolleado por su cuenta. */
+  var hashTarget = null;
+  try {
+    hashTarget = location.hash.length > 1
+      ? document.getElementById(decodeURIComponent(location.hash.slice(1)))
+      : null;
+  } catch (e) { hashTarget = null; }
+
+  if (hashTarget) {
+    var userMoved = false;
+    var markMoved = function () { userMoved = true; };
+    ['wheel', 'touchstart', 'keydown', 'mousedown'].forEach(function (type) {
+      window.addEventListener(type, markMoved, { once: true, passive: true });
+    });
+
+    var settled = pendingContent.map(function (p) { return p.catch(function () {}); });
+    Promise.all(settled).then(function () {
+      // Un turno más: los .then() que renderizan cada sección ya corrieron.
+      return new Promise(function (resolve) { setTimeout(resolve, 0); });
+    }).then(function () {
+      var images = Array.prototype.filter.call(document.querySelectorAll('main img'), function (img) {
+        return !img.complete && (img.compareDocumentPosition(hashTarget) & Node.DOCUMENT_POSITION_FOLLOWING);
+      });
+      return Promise.race([
+        Promise.all(images.map(function (img) {
+          return new Promise(function (resolve) {
+            img.addEventListener('load', resolve, { once: true });
+            img.addEventListener('error', resolve, { once: true });
+          });
+        })),
+        new Promise(function (resolve) { setTimeout(resolve, 3000); }),
+      ]);
+    }).then(function () {
+      if (!userMoved) { hashTarget.scrollIntoView({ block: 'start', behavior: 'instant' }); }
+    });
+  }
 }());
