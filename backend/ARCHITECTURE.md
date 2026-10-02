@@ -464,7 +464,25 @@ can never be swept into an rsync or git operation. Each dump is
 self-validated with `pg_restore --list` immediately after creation; a
 truncated/corrupt dump is deleted rather than kept. Retention: 14 days,
 enforced by the script on every run. Restore procedure is the same
-`pg_restore --clean --if-exists` command shown above. The full
+`pg_restore --clean --if-exists` command shown above.
+
+It is a **systemd timer, not cron** (the server has no crontab): check it
+with `systemctl list-timers backup-recreobienestar.timer` and
+`journalctl -u backup-recreobienestar.service`. The service *executes*
+`backup_db.sh` directly, so **the script must be executable in the repo**
+(git mode `100755`): every deploy rsyncs with `-a`, which copies the
+repo's file mode onto the server, so a `chmod +x` done only on the server
+is undone by the next deploy. That is exactly how backups broke: the
+script was committed as `100644`, and from the 04/09/2026 deploy until the
+fix the timer failed every night with `status=203/EXEC` (last good
+scheduled run: 23/08/2026) — the only dumps in that window were the manual
+pre-deploy ones. `entrypoint.sh` is kept `100755` too (the Dockerfile also
+`chmod +x`es its copy in the image). `common/tests/test_repo_scripts.py`
+fails if any of them loses the executable bit. After any deploy that
+touches them: `stat -c %a deploy/scripts/backup_db.sh` on the server must
+show an executable mode (775/755).
+
+The full
 dump→restore→verify cycle was validated during Stage A against an
 isolated, throwaway `postgres:16-alpine` container (never `recreo-db`
 itself) — row counts for `auth_user`, `catalog_video`,

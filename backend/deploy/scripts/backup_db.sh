@@ -1,8 +1,15 @@
 #!/bin/bash
 # Automated recreo-db backup (SECURITY_AUDIT.md HIGH-3).
 #
-# Runs OUTSIDE any container, on the EC2 host, via cron (see
-# deploy/systemd or crontab — installed manually, see ARCHITECTURE.md).
+# Runs OUTSIDE any container, on the EC2 host, via the systemd timer
+# backup-recreobienestar.timer -> backup-recreobienestar.service (daily
+# 02:15 UTC; unit sources in deploy/systemd/, installed manually at
+# /etc/systemd/system/ — see ARCHITECTURE.md §14). NOT cron.
+#
+# The service executes this file directly, so it MUST stay executable IN
+# THE REPO (git mode 100755): deploys rsync with -a, which copies the
+# repo's mode to the server. Committed as 100644 it failed every night
+# with status=203/EXEC from 04/09/2026 until fixed.
 # Writes to /home/ubuntu/backups/recreo-bienestar/ — deliberately OUTSIDE
 # the recreo-bienestar-backend/ directory this repo syncs to, so a dump
 # (which contains real user data and password hashes) can never
