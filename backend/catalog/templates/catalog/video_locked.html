@@ -5,12 +5,24 @@
 Deliberately does not receive/render youtube_video_id, youtube_url, or any
 thumbnail derived from them (the thumbnail fallback IS the video ID
 embedded in a URL) — nothing here can leak which video this is beyond its
-title/description, which are not secret.
+title/description, which are not secret. The only image is video.poster,
+our own copy under a random /media/ name (catalog/posters.py), and only for
+published videos.
 {% endcomment %}
 <section class="container video-locked-page">
+  {% if video.poster and video.is_published %}
+    <div class="video-card video-locked video-locked-poster">
+      <div class="video-frame" style="display:flex;align-items:center;justify-content:center;background:var(--color-bg-alt)">
+        <span class="video-poster" style="background-image:url('{{ video.poster.url }}')" aria-hidden="true"></span>
+        <span class="lock-chip"><svg width="13" height="13"><use href="#icon-lock"></use></svg> {{ video.get_access_level_display }}</span>
+        <span class="play-btn" aria-hidden="true"><svg width="22" height="22"><use href="#icon-lock"></use></svg></span>
+      </div>
+    </div>
+  {% else %}
   <div class="icon-tile" style="background:var(--color-gold-light);color:var(--color-gold);display:inline-flex;width:56px;height:56px;border-radius:50%;align-items:center;justify-content:center;margin-bottom:var(--space-4)">
     <svg width="24" height="24"><use href="#icon-lock"></use></svg>
   </div>
+  {% endif %}
   <span class="eyebrow">{{ video.category.name }}{% if video.program %} · {{ video.program.name }}{% endif %}</span>
   <h1>{{ video.title }}</h1>
   {% if video.short_description %}<p class="lede" style="margin-top:var(--space-3)">{{ video.short_description }}</p>{% endif %}

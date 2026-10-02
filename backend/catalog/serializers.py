@@ -8,7 +8,9 @@ created_at/updated_at, raw foreign key ids) through the public API.
 
 Locked-video fields (thumbnail, full_description, youtube_video_id) go
 through memberships.services.can_access_video exactly like the HTML
-views — this is not a separate copy of the access rules, just the same
+views. A locked video's `thumbnail` is only ever our own-hosted poster
+(Video.poster, a random /media/ name) — never thumbnail_display_url,
+which can be derived from the YouTube id — this is not a separate copy of the access rules, just the same
 check applied at the API boundary too. See VideoViewSet.retrieve() for the
 detail-endpoint half of this.
 """
@@ -51,6 +53,9 @@ class VideoListSerializer(serializers.ModelSerializer):
     category = CategoryMiniSerializer(read_only=True)
     program = ProgramMiniSerializer(read_only=True)
     thumbnail = serializers.SerializerMethodField()
+    # Explicit, so clients never infer "locked" from a missing thumbnail —
+    # locked videos can have one now (their own-hosted poster).
+    is_locked = serializers.SerializerMethodField()
     # Human-readable label ("Gratuito", "Plan de membresía 1", ...) for
     # clients that just want to display it without duplicating
     # common.choices.VideoAccessLevel's labels themselves (e.g. the public
@@ -60,27 +65,37 @@ class VideoListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Video
         fields = [
-            'id', 'title', 'slug', 'short_description', 'thumbnail',
+            'id', 'title', 'slug', 'short_description', 'thumbnail', 'is_locked',
             'category', 'program', 'access_level', 'access_level_display',
             'is_featured', 'display_order', 'duration_label', 'publication_date',
         ]
 
+    def _can_access(self, obj):
+        # One access check per video per response, shared by thumbnail and
+        # is_locked. `subscriptions`/`purchases` (see
+        # VideoViewSet.get_serializer_context) are the caller's
+        # subscriptions/offering purchases fetched once for the whole page,
+        # not re-queried for every video in the list.
+        cache = self.context.setdefault('_access_cache', {})
+        if obj.pk not in cache:
+            request = self.context.get('request')
+            cache[obj.pk] = can_access_video(
+                getattr(request, 'user', None), obj,
+                subscriptions=self.context.get('subscriptions'),
+                purchases=self.context.get('purchases'),
+            )
+        return cache[obj.pk]
+
+    def get_is_locked(self, obj):
+        return not self._can_access(obj)
+
     def get_thumbnail(self, obj):
-        # The thumbnail fallback (Video.thumbnail_display_url) derives a
-        # img.youtube.com URL FROM the video ID when no explicit
-        # thumbnail_url is set — showing it for a video the caller can't
-        # access would hand them the ID just as surely as the detail
-        # endpoint's youtube_video_id field would. Same check, same rule.
-        #
-        # `subscriptions`/`purchases` (see VideoViewSet.get_serializer_context)
-        # are the caller's subscriptions/offering purchases fetched once for
-        # the whole page, not re-queried for every video in the list.
-        request = self.context.get('request')
-        user = getattr(request, 'user', None)
-        subscriptions = self.context.get('subscriptions')
-        purchases = self.context.get('purchases')
-        if not can_access_video(user, obj, subscriptions=subscriptions, purchases=purchases):
-            return None
+        if not self._can_access(obj):
+            # LOCKED: only our own-hosted poster, or nothing. Never
+            # thumbnail_display_url — its fallback is a img.youtube.com URL
+            # derived FROM the video ID, which would hand out the ID just as
+            # surely as the detail endpoint's youtube_video_id field would.
+            return obj.poster.url if obj.poster else None
         return obj.thumbnail_display_url or None
 
 

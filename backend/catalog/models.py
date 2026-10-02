@@ -1,3 +1,6 @@
+import uuid
+from pathlib import Path
+
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -6,6 +9,20 @@ from common.choices import VideoAccessLevel
 from common.models import OrderedActiveModel, TimeStampedModel
 from common.text import extract_youtube_id, generate_unique_slug
 from common.validators import validate_youtube_url
+
+
+POSTER_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp'}
+
+
+def video_poster_upload_to(instance, filename):
+    """An opaque, random name — never the YouTube id, the slug or the
+    uploaded file's own name: the poster is public on LOCKED cards, and
+    anything derived from the video's id would let people play it. Only
+    the extension of an Admin upload is kept."""
+    extension = Path(filename).suffix.lower()
+    if extension not in POSTER_EXTENSIONS:
+        extension = '.jpg'
+    return f'videos/posters/{uuid.uuid4().hex}{extension}'
 
 
 class Category(OrderedActiveModel, TimeStampedModel):
@@ -78,6 +95,19 @@ class Video(TimeStampedModel):
         max_length=500, blank=True,
         help_text='Opcional. Si se deja vacío, puede usarse la miniatura de YouTube.',
     )
+    # Our own copy of the poster, served from /media/ under a random name.
+    # The ONLY image a locked video ever shows: thumbnail_display_url can
+    # fall back to img.youtube.com/vi/<id>/..., which would hand out the id
+    # (= the video). See catalog/posters.py for how it's filled.
+    poster = models.ImageField(
+        'Imagen de portada (videos bloqueados)',
+        upload_to=video_poster_upload_to, blank=True,
+        help_text=(
+            'Es la imagen que ven, con el candado encima, quienes todavía no tienen acceso a '
+            'este video. Se descarga sola de YouTube la primera vez que se guarda el video; '
+            'podés reemplazarla subiendo otra imagen.'
+        ),
+    )
 
     category = models.ForeignKey(
         Category, on_delete=models.PROTECT, related_name='videos',
@@ -123,6 +153,12 @@ class Video(TimeStampedModel):
             self.slug = generate_unique_slug(self, self.title)
         self.youtube_video_id = extract_youtube_id(self.youtube_url) or ''
         super().save(*args, **kwargs)
+        if self.youtube_video_id and not self.poster:
+            # Deferred until after commit and failure-proof — saving a video
+            # never waits on, or fails because of, YouTube. See
+            # catalog/posters.py:schedule_poster_fetch.
+            from .posters import schedule_poster_fetch
+            schedule_poster_fetch(self.pk)
 
     @property
     def is_free(self):
