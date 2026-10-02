@@ -6,7 +6,10 @@ view + its own template) rather than inventing a new pattern; see that
 view for the sibling case (Program instead of Offering).
 """
 from django.contrib.auth.decorators import login_required
+from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, render
+
+from payments.models import OfferingPurchase
 
 from .models import Offering
 
@@ -36,3 +39,31 @@ def offering_detail(request, slug):
     """
     offering = get_object_or_404(Offering, slug=slug, is_active=True)
     return render(request, 'site_content/offering_detail.html', {'offering': offering})
+
+
+@login_required
+def offering_download(request, slug):
+    """GET /propuestas/<slug>/descargar/ — the offering's PDF, ONLY for a
+    user with a COMPLETED purchase of it. The file lives in private storage
+    (site_content/storage.py) with no public URL; this is the only way out.
+
+    Anonymous: login redirect (via @login_required, same as offering_detail
+    — reveals nothing, it happens for any slug). Logged in but no COMPLETED
+    purchase (never bought, PENDING, FAILED, REFUNDED), no file, missing
+    file, or unknown slug: all the same 404, so a non-buyer can't tell
+    whether a file exists. Access is indefinite: a completed purchase keeps
+    working even if Carla later deactivates the offering (no is_active
+    filter here, on purpose)."""
+    offering = Offering.objects.filter(slug=slug).first()
+    if offering is None or not offering.deliverable:
+        raise Http404
+    bought = OfferingPurchase.objects.completed().filter(user=request.user, offering=offering).exists()
+    if not bought:
+        raise Http404
+    try:
+        handle = offering.deliverable.open('rb')
+    except (FileNotFoundError, OSError):
+        raise Http404
+    return FileResponse(
+        handle, as_attachment=True, filename=f'{offering.slug}.pdf', content_type='application/pdf',
+    )

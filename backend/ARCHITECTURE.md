@@ -547,6 +547,17 @@ starts a grace period (access for `grace_days`), while an EXPIRED one is
 ignored (no access). Fix the Admin's display instead (e.g. show
 "Activa (vencida)" from the dates) if the label is the problem.
 
+**Paid PDF downloads (Offering.deliverable).** Stored in
+`PRIVATE_MEDIA_ROOT` (`/app/private_media`), the `recreo_private_media`
+volume — mounted into recreo-django only, never served under `/media/`
+(which serves everything in `MEDIA_ROOT` to anyone). Random filenames
+(`offerings/<uuid>.pdf`). The only way to get one is
+`GET /propuestas/<slug>/descargar/`, which requires login and a COMPLETED
+purchase (anything else is 404). Not covered by the DB backup — like
+`recreo_media`, the volume needs its own copy if the PDFs aren't kept
+elsewhere. Carla uploads them in the Admin (Propuestas → "PDF para
+descargar").
+
 ## 15. Known infrastructure constraints
 
 - **t2.micro, 954MB RAM, 0 swap.** Baseline OS/daemon overhead
@@ -677,7 +688,7 @@ rsync -az --itemize-changes \
   --exclude='.git' --exclude='__pycache__' --exclude='.env' \
   --exclude='venv' --exclude='/db.sqlite3' \
   --exclude='/nginx/static-root' --exclude='/nginx/logs' \
-  --exclude='/media' --exclude='/staticfiles' \
+  --exclude='/media' --exclude='/private_media' --exclude='/staticfiles' \
   backend/ ubuntu@<ec2-host>:/home/ubuntu/recreo-bienestar-backend/
 
 # Sync the static site (repo root) into nginx/static-root/ — dry-run with

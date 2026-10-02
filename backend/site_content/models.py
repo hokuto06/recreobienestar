@@ -20,13 +20,17 @@ separate from catalog (Video/Category/Program) and memberships
   service, ...) simply grants none — that's the blank=True default, not a
   special case.
 """
+import uuid
 from decimal import Decimal
 
-from django.core.validators import MaxValueValidator, MinValueValidator
+from django.core.exceptions import ValidationError
+from django.core.validators import FileExtensionValidator, MaxValueValidator, MinValueValidator
 from django.db import models
 
 from common.models import OrderedActiveModel, TimeStampedModel
 from common.text import generate_unique_slug
+
+from .storage import PrivateMediaStorage
 
 
 class SiteSettings(TimeStampedModel):
@@ -106,6 +110,33 @@ class SiteSettings(TimeStampedModel):
         return obj
 
 
+MAX_DELIVERABLE_BYTES = 20 * 1024 * 1024  # nginx's client_max_body_size is 20M too
+
+
+def offering_deliverable_upload_to(instance, filename):
+    """Random name — never the offering's name/slug or the uploaded file's
+    own name, so the stored path can't be guessed from the product."""
+    return f'offerings/{uuid.uuid4().hex}.pdf'
+
+
+def validate_pdf(upload):
+    """Extension AND content: the file must be named .pdf and actually start
+    with the PDF signature (%PDF-), and be at most 20 MB. Renaming a .zip or
+    an .exe to .pdf doesn't get through."""
+    FileExtensionValidator(['pdf'], message='Subí un archivo PDF (.pdf).')(upload)
+    if upload.size > MAX_DELIVERABLE_BYTES:
+        raise ValidationError('El PDF pesa más de 20 MB.')
+    position = upload.tell() if hasattr(upload, 'tell') else None
+    try:
+        upload.seek(0)
+        signature = upload.read(5)
+    finally:
+        if position is not None:
+            upload.seek(position)
+    if signature != b'%PDF-':
+        raise ValidationError('El archivo no es un PDF válido.')
+
+
 class Offering(OrderedActiveModel, TimeStampedModel):
     name = models.CharField(max_length=150)
     slug = models.SlugField(max_length=170, unique=True, blank=True)
@@ -136,6 +167,22 @@ class Offering(OrderedActiveModel, TimeStampedModel):
     videos = models.ManyToManyField(
         'catalog.Video', related_name='offerings', blank=True,
         help_text='Videos que se desbloquean al comprar esta propuesta (opcional).',
+    )
+
+    # A downloadable PDF delivered by this offering (optional — an offering
+    # can have videos, a file, or both). Stored in PrivateMediaStorage, NOT
+    # in public media, under a random name; the only way to get it is
+    # site_content.public_views.offering_download, which requires a
+    # COMPLETED purchase.
+    deliverable = models.FileField(
+        'PDF para descargar',
+        upload_to=offering_deliverable_upload_to, storage=PrivateMediaStorage(), blank=True,
+        validators=[validate_pdf],
+        help_text=(
+            'Opcional. Un PDF que reciben quienes compran esta propuesta: lo descargan desde '
+            'su cuenta y desde el link del mail de confirmación. Solo pueden descargarlo '
+            'quienes lo compraron. Máximo 20 MB.'
+        ),
     )
 
     class Meta(OrderedActiveModel.Meta):

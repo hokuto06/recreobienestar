@@ -113,6 +113,19 @@
         {% endif %}
       </div>
 
+      {% if downloads %}
+        <div class="card" style="margin-top:var(--space-4)" data-downloads>
+          <h3>Tus descargas</h3>
+          <p style="margin-top:0.5rem;color:var(--color-text-muted);font-size:0.9rem">Los PDF de las propuestas que compraste. Podés bajarlos cuando quieras.</p>
+          {% for offering in downloads %}
+            <a class="btn btn-ghost btn-block btn-sm" style="margin-top:0.75rem" href="{% url 'site_content:offering_download' offering.slug %}">
+              <svg width="16" height="16" aria-hidden="true"><use href="#icon-arrow-right"></use></svg>
+              {{ offering.name }} (PDF)
+            </a>
+          {% endfor %}
+        </div>
+      {% endif %}
+
       <div class="card" style="margin-top:var(--space-4)">
         <h3>Tu progreso</h3>
         <p style="margin-top:0.5rem;color:var(--color-text-muted);font-size:0.9rem">

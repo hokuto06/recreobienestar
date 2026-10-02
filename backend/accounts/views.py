@@ -31,7 +31,7 @@ from memberships.services import (
     get_newer_pending_subscription,
     subscription_was_never_paid,
 )
-from payments.models import OfferingPurchase
+from payments.models import OfferingPurchase, PurchaseStatus
 
 from .forms import EmailOrUsernameAuthenticationForm, ProfileForm, RegistrationForm
 from .models import Profile
@@ -242,6 +242,20 @@ def dashboard(request):
     locked_videos = [v for v in published_videos if not v.unlocked]
     completed_count = sum(1 for p in progress_map.values() if p.completed)
 
+    # Offerings this user actually bought (COMPLETED) that come with a PDF —
+    # from the purchases already fetched above, no extra query. Download
+    # access is enforced by site_content.public_views.offering_download
+    # itself; this is only the list of links.
+    downloads, seen_offerings = [], set()
+    for purchase in all_purchases:
+        offering = purchase.offering
+        if (
+            purchase.status == PurchaseStatus.COMPLETED and offering.deliverable
+            and offering.pk not in seen_offerings
+        ):
+            seen_offerings.add(offering.pk)
+            downloads.append(offering)
+
     # "Continue watching" videos were accessible when the member started
     # them, but access is re-checked here rather than assumed — a lapsed
     # subscription must re-lock the card (and its thumbnail) exactly like
@@ -275,5 +289,6 @@ def dashboard(request):
         'continue_watching': continue_watching,
         'favorite_videos': [v for v in published_videos if v.is_favorited][:6],
         'completed_count': completed_count,
+        'downloads': downloads,
     }
     return render(request, 'accounts/dashboard.html', context)

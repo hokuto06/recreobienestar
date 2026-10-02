@@ -9,3 +9,4 @@ venv
 staticfiles
 media
 *.egg-info
+private_media
