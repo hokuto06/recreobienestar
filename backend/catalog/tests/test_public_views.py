@@ -66,8 +66,15 @@ class VideoDetailAccessTests(TestCase):
         self.assertNotContains(resp, '#membresias', status_code=403)
 
     @skipUnless(HOME_PAGE.exists(), 'static site (repo root) not present, e.g. inside the image')
-    def test_membership_anchor_exists_on_home_page(self):
-        self.assertIn('id="columna-sana"', HOME_PAGE.read_text(encoding='utf-8'))
+    def test_membership_anchor_is_the_pricing_cards_section(self):
+        """The anchor must exist AND be the section holding the pricing
+        cards (data-plans-mount, filled from /api/plans/) — not a video
+        block like #videoteca right above it."""
+        html = HOME_PAGE.read_text(encoding='utf-8')
+        start = html.index('id="columna-sana"')
+        section = html[start:html.index('</section>', start)]
+        self.assertIn('data-plans-mount', section)
+        self.assertNotIn('data-videos-mount', section)
 
     # ── active / expired ─────────────────────────────────────────────
     def test_active_plan_grants_access(self):
