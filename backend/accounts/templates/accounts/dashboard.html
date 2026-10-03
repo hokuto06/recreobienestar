@@ -99,10 +99,15 @@
               <p style="color:var(--color-text-muted);font-size:0.9rem;margin-top:0.5rem" data-pending-payment-notice>Estamos confirmando tu pago del {{ pending_subscription.plan.name }}.</p>
             {% endif %}
             {% if subscription.mp_preapproval_id %}
-              <p style="margin-top:0.5rem"><a href="{% url 'memberships:mi_suscripcion' %}">Administrar suscripción →</a></p>
               {% if upgrade_offer.can_upgrade %}
-                <p style="margin-top:0.25rem" data-upgrade-link><a href="{% url 'memberships:mi_suscripcion' %}">Pasate al {{ upgrade_offer.annual_plan.name }} →</a></p>
+                {# Same eligibility as /mi-cuenta/suscripcion/'s card (memberships.upgrades.get_upgrade_offer). #}
+                <div class="upgrade-callout" data-upgrade-link>
+                  <p class="upgrade-callout-title">Pasate al {{ upgrade_offer.annual_plan.name }}</p>
+                  <p>Seguís con tu plan mensual hasta el {{ upgrade_offer.renewal_at|date:"d/m/Y" }} y ese día empieza el anual: ${{ upgrade_offer.annual_plan.price|floatformat:"0g" }} {{ upgrade_offer.annual_plan.currency }} por año. Hoy no se cobra nada.</p>
+                  <a class="btn btn-primary btn-sm btn-block" href="{% url 'memberships:mi_suscripcion' %}#pasar-al-anual">Ver el cambio al {{ upgrade_offer.annual_plan.name }}</a>
+                </div>
               {% endif %}
+              <a class="btn btn-ghost btn-sm btn-block" style="margin-top:0.75rem" href="{% url 'memberships:mi_suscripcion' %}" data-manage-subscription>Administrar suscripción</a>
             {% endif %}
           {% else %}
             <h3 style="margin-top:0.6rem">Plan gratuito</h3>

@@ -37,6 +37,18 @@
     {% else %}
       <p data-payer-email-notice style="color:var(--color-text-muted)">Tu cuenta no tiene un email cargado. Mercado Pago necesita el email de tu cuenta para cobrar la suscripción, y tiene que ser el mismo que usás en Mercado Pago. Escribinos desde el <a href="/#contacto">formulario de contacto</a> y lo agregamos.</p>
     {% endif %}
+  {% elif upgrade %}
+    {# A member with an active monthly, on the annual plan's page. #}
+    {% if upgrade.scheduled %}
+      <p data-upgrade-plan-page>Tu cambio al {{ plan.name }} ya está programado: seguís con el plan mensual hasta el <strong>{{ upgrade.renewal_at|date:"d/m/Y" }}</strong> y ese día empieza el anual.</p>
+      <a class="btn btn-ghost btn-block" style="margin-top:1rem" href="{% url 'memberships:mi_suscripcion' %}">Ver mi suscripción</a>
+    {% elif upgrade.refusal %}
+      <p data-upgrade-plan-page style="color:var(--color-text-muted)">{{ upgrade.refusal }}</p>
+      <a class="btn btn-ghost btn-block" style="margin-top:1rem" href="{% url 'memberships:mi_suscripcion' %}">Ver mi suscripción</a>
+    {% else %}
+      <p data-upgrade-plan-page>Ya tenés el plan mensual, y podés pasarte al {{ plan.name }} sin perder ningún día: seguís con el mensual hasta el <strong>{{ upgrade.renewal_at|date:"d/m/Y" }}</strong>, ese día empieza el anual, y hoy no se cobra nada.</p>
+      <a class="btn btn-primary btn-block" style="margin-top:1rem" href="{% url 'memberships:mi_suscripcion' %}#pasar-al-anual">Pasarme al {{ plan.name }}</a>
+    {% endif %}
   {% elif has_active_paid_subscription %}
     <p style="color:var(--color-text-muted)">Ya tenés una membresía activa. Por ahora no se puede cambiar de plan.</p>
     <a class="btn btn-primary btn-block" href="{% url 'catalog:video_library' %}">Ir a la videoteca</a>

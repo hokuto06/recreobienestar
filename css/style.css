@@ -1254,6 +1254,20 @@ p.quote { font-size: 1.3rem; font-weight: 300; font-style: italic; color: var(--
 .member-hero {
   padding-block: var(--space-6);
 }
+
+/* Llamado a pasarse al plan anual dentro de la tarjeta de membresía del
+   panel: un recuadro suave (celeste de la paleta) con su botón, para que
+   se vea sin gritar. Solo aparece si la miembra puede hacer el cambio. */
+.upgrade-callout {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-pool-light);
+}
+.upgrade-callout .upgrade-callout-title { font-weight: 600; color: var(--color-pool-dark); }
+.upgrade-callout p { font-size: 0.9rem; }
+.upgrade-callout p + p { margin-top: 0.35rem; color: var(--color-text); }
+.upgrade-callout .btn { margin-top: 0.75rem; }
 .member-hero h1 { font-size: clamp(1.6rem, 1.3rem + 1vw, 2.1rem); }
 
 .category-tabs {

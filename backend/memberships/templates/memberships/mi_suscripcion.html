@@ -51,7 +51,7 @@
       /api/subscription/upgrade/ and redirects to Mercado Pago to
       authorize; nothing is charged today.
       {% endcomment %}
-      <div class="card" style="margin-top:var(--space-4)" data-upgrade-card>
+      <div class="card" style="margin-top:var(--space-4)" id="pasar-al-anual" data-upgrade-card>
         <h3>Pasate al {{ upgrade.annual_plan.name }}</h3>
         {% if upgrade.scheduled %}
           <p style="margin-top:0.75rem">

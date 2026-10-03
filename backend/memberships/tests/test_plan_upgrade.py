@@ -377,3 +377,106 @@ class UpgradeLifecycleTests(_Upgrade, APITestCase):
         self.assertTrue(self.monthly.is_active())
         self.assertTrue(self.monthly.is_active(at=self.monthly_ends_at - timedelta(minutes=1)))
         self.assertEqual(self.monthly.status, SubscriptionStatus.ACTIVE)  # MP renews it as usual
+
+
+class UpgradeDiscoverabilityTests(_Upgrade, TestCase):
+    """The upgrade is reachable from the dashboard card and the annual plan
+    page — for eligible members only; everyone else sees what they saw."""
+    OLD_COPY = 'Ya tenés una membresía activa. Por ahora no se puede cambiar de plan.'
+
+    def setUp(self):
+        self._base()
+        self.annual_page = reverse('memberships:membresia_detail', args=[self.yearly.slug])
+        self.monthly_page = reverse('memberships:membresia_detail', args=[self.monthly.plan.slug])
+
+    def _login(self, user=None):
+        self.client.force_login(user or self.user)
+
+    def _user(self, name):
+        return self.user.__class__.objects.create_user(username=name, email=f'{name}@example.com', password='x')
+
+    def test_eligible_member_sees_the_cta_on_the_dashboard_card(self):
+        self._login()
+        resp = self.client.get(reverse('accounts:dashboard'))
+        day = timezone.localtime(self.renewal_at).strftime('%d/%m/%Y')
+        for expected in (
+            'class="upgrade-callout" data-upgrade-link', 'Pasate al Plan Anual',
+            f'Seguís con tu plan mensual hasta el {day}', '300.000 ARS por año', 'Hoy no se cobra nada.',
+            'href="/mi-cuenta/suscripcion/#pasar-al-anual"', 'Ver el cambio al Plan Anual',
+        ):
+            self.assertContains(resp, expected)
+        # "Administrar suscripción" is now a real (ghost) button.
+        self.assertContains(resp, 'class="btn btn-ghost btn-sm btn-block"')
+        self.assertContains(resp, 'data-manage-subscription>Administrar suscripción</a>')
+        self.assertContains(self.client.get(reverse('memberships:mi_suscripcion')), 'id="pasar-al-anual"')
+
+    def test_eligible_member_on_the_annual_page_is_sent_to_the_upgrade(self):
+        self._login()
+        resp = self.client.get(self.annual_page)
+        self.assertContains(resp, 'data-upgrade-plan-page')
+        self.assertContains(resp, 'podés pasarte al Plan Anual sin perder ningún día')
+        self.assertContains(resp, 'hoy no se cobra nada')
+        self.assertContains(resp, '#pasar-al-anual">Pasarme al Plan Anual</a>')
+        self.assertNotContains(resp, self.OLD_COPY)
+        self.assertNotContains(resp, 'data-subscribe-form')
+
+    def test_monthly_member_on_the_monthly_page_keeps_the_old_copy(self):
+        self._login()
+        resp = self.client.get(self.monthly_page)
+        self.assertContains(resp, self.OLD_COPY)
+        self.assertNotContains(resp, 'data-upgrade-plan-page')
+
+    def test_annual_member_sees_neither_and_keeps_the_old_copy(self):
+        user = self._user('anual')
+        annual = self._pending(self.yearly, user=user, preapproval_id='pre-y')
+        self._make_active(annual)
+        self._login(user)
+        dashboard = self.client.get(reverse('accounts:dashboard'))
+        self.assertNotContains(dashboard, 'upgrade-callout')
+        self.assertContains(dashboard, 'data-manage-subscription')
+        page = self.client.get(self.annual_page)
+        self.assertContains(page, self.OLD_COPY)
+        self.assertNotContains(page, 'data-upgrade-plan-page')
+
+    def test_trial_user_sees_no_upgrade_and_can_still_subscribe(self):
+        user = self._user('prueba')
+        self._trial(user=user)
+        self._login(user)
+        self.assertNotContains(self.client.get(reverse('accounts:dashboard')), 'upgrade-callout')
+        page = self.client.get(self.annual_page)
+        self.assertNotContains(page, 'data-upgrade-plan-page')
+        self.assertNotContains(page, self.OLD_COPY)
+        self.assertContains(page, 'data-subscribe-form')
+
+    def test_cancelled_monthly_still_entitled_is_not_eligible(self):
+        # The production case from the diagnosis: cancelled, still has access.
+        self.monthly.status = SubscriptionStatus.CANCELLED
+        self.monthly.save()
+        self._login()
+        self.assertNotContains(self.client.get(reverse('accounts:dashboard')), 'upgrade-callout')
+        page = self.client.get(self.annual_page)
+        self.assertContains(page, self.OLD_COPY)
+        self.assertNotContains(page, 'data-upgrade-plan-page')
+
+    def test_refusal_window_explains_on_the_annual_page_and_hides_the_dashboard_cta(self):
+        self.monthly.next_payment_date = timezone.now() + timedelta(days=2)
+        self.monthly.save()
+        self._login()
+        self.assertNotContains(self.client.get(reverse('accounts:dashboard')), 'upgrade-callout')
+        page = self.client.get(self.annual_page)
+        self.assertContains(page, 'data-upgrade-plan-page')
+        self.assertContains(page, 'Tu renovación mensual es el')
+        self.assertNotContains(page, 'Pasarme al Plan Anual')
+        self.assertNotContains(page, self.OLD_COPY)
+
+    def test_scheduled_upgrade_says_so_on_the_annual_page(self):
+        Subscription.objects.create(
+            user=self.user, plan=self.yearly, status=SubscriptionStatus.PENDING, replaces=self.monthly,
+            starts_at=self.renewal_at - ANNUAL_CHARGE_LEAD, amount=self.yearly.price, currency='ARS',
+            mp_preapproval_id='pre-annual', mp_status='authorized',
+        )
+        self._login()
+        self.assertNotContains(self.client.get(reverse('accounts:dashboard')), 'upgrade-callout')
+        page = self.client.get(self.annual_page)
+        self.assertContains(page, 'Tu cambio al Plan Anual ya está programado')
+        self.assertNotContains(page, 'Pasarme al Plan Anual')

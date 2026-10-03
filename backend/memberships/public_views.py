@@ -88,6 +88,14 @@ def membresia_detail(request, slug):
         # offered to someone who can't use it.
         'payer_email': request.user.email,
     }
+    # A member with an active monthly who lands on the ANNUAL plan's page can
+    # upgrade (memberships/upgrades.py, same eligibility as everywhere else)
+    # — point them there instead of the old "no se puede cambiar de plan".
+    from .upgrades import get_upgrade_offer
+
+    offer = get_upgrade_offer(request.user)
+    if offer.monthly is not None and offer.annual_plan == plan:
+        context['upgrade'] = offer
     return render(request, 'memberships/membresia_detail.html', context)
 
 
