@@ -41,7 +41,7 @@ from django.utils.dateparse import parse_datetime
 from common.choices import SubscriptionStatus
 from common.notifications import (
     schedule_grace_started_notification, schedule_lapse_notification,
-    schedule_subscription_charge_notification,
+    schedule_subscription_charge_notification, schedule_upgrade_scheduled_notification,
 )
 
 from .models import Subscription, SubscriptionCharge, SubscriptionChargeOutcome
@@ -242,6 +242,17 @@ def process_authorized_payment(authorized_payment_id):
             # row. The daily lapse command covers the case where MP simply
             # stops retrying.
             schedule_lapse_notification(subscription.pk)
+        if subscription.replaces_id is not None:
+            # Plan upgrade (memberships/upgrades.py): only now that the
+            # annual is paid is the monthly cancelled; a failed first charge
+            # cancels the annual instead (the monthly then renews as usual).
+            from .upgrades import (
+                schedule_failed_upgrade_cancellation, schedule_replaced_monthly_cancellation,
+            )
+            if charge.outcome == SubscriptionChargeOutcome.ACTIVATED and status_before == SubscriptionStatus.PENDING:
+                schedule_replaced_monthly_cancellation(subscription.pk)
+            elif charge.outcome == SubscriptionChargeOutcome.FIRST_CHARGE_FAILED:
+                schedule_failed_upgrade_cancellation(subscription.pk)
         subscription.last_charge_payment_id = mp_payment_id
         subscription.last_charge_status = mp_payment_status
         subscription.save()
@@ -291,11 +302,20 @@ def _apply_approved_charge(subscription, now):
     deferred it to). A CANCELLED subscription stays CANCELLED (the member
     cancelled; a charge that was already in flight still buys its
     period) — anything else becomes ACTIVE."""
+    period_start = now
     if subscription.status == SubscriptionStatus.PENDING:
         subscription.starts_at = now
+        if subscription.replaces_id is not None:
+            # Plan upgrade: the annual's first charge runs a day before the
+            # replaced monthly's paid month ends; its year counts from that
+            # end, so the member loses no paid day (memberships/upgrades.py).
+            from .upgrades import upgrade_period_anchor
+            anchor = upgrade_period_anchor(subscription.replaces) if subscription.replaces else None
+            if anchor is not None and anchor > now:
+                period_start = anchor
     if subscription.status != SubscriptionStatus.CANCELLED:
         subscription.status = SubscriptionStatus.ACTIVE
-    subscription.ends_at = paid_period_end(subscription.plan, now)
+    subscription.ends_at = paid_period_end(subscription.plan, period_start)
     subscription.clear_grace()
     supersede_active_trial(subscription.user, subscription, at=now)
     return SubscriptionChargeOutcome.ACTIVATED
@@ -354,6 +374,7 @@ def process_preapproval(preapproval_id):
             return 200
 
         mp_status = preapproval.get('status') or ''
+        previous_mp_status = subscription.mp_status
         subscription.mp_status = mp_status
         next_payment_date = parse_datetime(preapproval.get('next_payment_date') or '')
         if next_payment_date is not None:
@@ -363,6 +384,13 @@ def process_preapproval(preapproval_id):
         if mp_status == 'cancelled':
             mark_subscription_cancelled(subscription)
         subscription.save()
+        if (
+            subscription.replaces_id is not None and mp_status == 'authorized'
+            and previous_mp_status != 'authorized' and subscription.status == SubscriptionStatus.PENDING
+        ):
+            # The member just authorized a plan upgrade: tell them what
+            # happens and when (sent once, on this transition).
+            schedule_upgrade_scheduled_notification(subscription.pk)
 
     logger.info(
         'Mercado Pago preapproval %s: Subscription %s -> mp_status=%s, status=%s',

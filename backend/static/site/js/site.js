@@ -293,4 +293,50 @@
         });
     });
   });
+
+  /* ---------- Pasarse al plan anual (memberships/upgrades.py) ----------
+     Same CSRF-via-meta-tag pattern as Suscribirme: /api/subscription/
+     upgrade/ answers with Mercado Pago's init_point (authorize now, first
+     annual charge later), so the redirect happens here. Asks for
+     confirmation first; any failure shows [data-upgrade-error] — including
+     the server's explanation when the renewal is too close. */
+  document.querySelectorAll('[data-upgrade-form]').forEach(function (form) {
+    form.addEventListener('submit', function (evt) {
+      evt.preventDefault();
+      var button = form.querySelector('[data-upgrade-submit]');
+      var errorBox = document.querySelector('[data-upgrade-error]');
+      if (!csrfToken || !button || button.disabled) { return; }
+      if (!window.confirm('¿Confirmás el cambio al plan anual? Hoy no se te cobra nada.')) { return; }
+      if (errorBox) { errorBox.hidden = true; }
+      button.disabled = true;
+      var originalLabel = button.textContent;
+      button.textContent = 'Redirigiendo a Mercado Pago…';
+
+      fetch('/api/subscription/upgrade/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken,
+          'Accept': 'application/json',
+        },
+        body: '{}',
+      })
+        .then(function (resp) {
+          return resp.json().catch(function () { return {}; }).then(function (data) {
+            if (!resp.ok || !data.init_point) {
+              throw new Error(data.detail || 'No se pudo preparar el cambio de plan. Intentá de nuevo en unos minutos.');
+            }
+            window.location.href = data.init_point;
+          });
+        })
+        .catch(function (err) {
+          button.disabled = false;
+          button.textContent = originalLabel;
+          if (errorBox) {
+            errorBox.textContent = (err && err.message) || 'No se pudo preparar el cambio de plan. Intentá de nuevo en unos minutos.';
+            errorBox.hidden = false;
+          }
+        });
+    });
+  });
 })();

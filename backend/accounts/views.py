@@ -25,6 +25,7 @@ from catalog.models import Favorite, Video
 from catalog.services import get_continue_watching, get_favorited_video_ids, get_progress_map
 from common.choices import SubscriptionStatus, VideoAccessLevel
 from memberships.models import Subscription
+from memberships.upgrades import get_upgrade_offer
 from memberships.services import (
     can_access_video,
     get_current_subscription,
@@ -290,5 +291,6 @@ def dashboard(request):
         'favorite_videos': [v for v in published_videos if v.is_favorited][:6],
         'completed_count': completed_count,
         'downloads': downloads,
+        'upgrade_offer': get_upgrade_offer(user),
     }
     return render(request, 'accounts/dashboard.html', context)

@@ -43,6 +43,39 @@
         {% endif %}
       {% endif %}
     </div>
+
+    {% if upgrade %}
+      {% comment %}
+      Monthly -> Annual (memberships/upgrades.py). Shown only to members
+      with an active monthly paid subscription. site.js POSTs to
+      /api/subscription/upgrade/ and redirects to Mercado Pago to
+      authorize; nothing is charged today.
+      {% endcomment %}
+      <div class="card" style="margin-top:var(--space-4)" data-upgrade-card>
+        <h3>Pasate al {{ upgrade.annual_plan.name }}</h3>
+        {% if upgrade.scheduled %}
+          <p style="margin-top:0.75rem">
+            Tu cambio ya está programado: seguís con el plan mensual hasta el
+            <strong>{{ upgrade.renewal_at|date:"d/m/Y" }}</strong> y ese día empieza tu {{ upgrade.annual_plan.name }}.
+            El primer cobro anual se hace el {{ upgrade.scheduled.starts_at|date:"d/m/Y" }}.
+          </p>
+        {% elif upgrade.refusal %}
+          <p style="margin-top:0.75rem;color:var(--color-text-muted)" data-upgrade-refusal>{{ upgrade.refusal }}</p>
+        {% else %}
+          <ul style="margin-top:0.75rem;padding-left:1.1rem;line-height:1.6">
+            <li>Mantenés tu plan mensual y todo tu acceso hasta el <strong>{{ upgrade.renewal_at|date:"d/m/Y" }}</strong>.</li>
+            <li>Ese día empieza tu {{ upgrade.annual_plan.name }}: <strong>${{ upgrade.annual_plan.price|floatformat:"0g" }} {{ upgrade.annual_plan.currency }} por año</strong>.</li>
+            <li><strong>Hoy no se te cobra nada.</strong> Mercado Pago te pide autorizar el pago y hace el primer cobro anual el {{ upgrade.annual_charge_at|date:"d/m/Y" }}.</li>
+            <li>Recién cuando se acredita ese cobro se cancela tu plan mensual: no pagás dos veces ni perdés ningún día.</li>
+          </ul>
+          <div class="alert alert-error" data-upgrade-error hidden style="margin-top:1rem"></div>
+          <form data-upgrade-form style="margin-top:1rem">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary btn-block" data-upgrade-submit>Pasarme al {{ upgrade.annual_plan.name }}</button>
+          </form>
+        {% endif %}
+      </div>
+    {% endif %}
   {% else %}
     <p style="color:var(--color-text-muted)">No tenés una suscripción paga.</p>
     <a class="btn btn-primary btn-block" href="/#columna-sana">Ver planes de membresía</a>

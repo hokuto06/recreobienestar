@@ -93,6 +93,23 @@ def schedule_lapse_notification(subscription_id):
     _after_commit(notify_carla_access_lapsed, subscription_id)
 
 
+def schedule_upgrade_scheduled_notification(subscription_id):
+    """Call when the member authorizes a Monthly -> Annual upgrade (the
+    annual's preapproval turns authorized)."""
+    _after_commit(notify_member_upgrade_scheduled, subscription_id)
+
+
+def schedule_upgrade_failed_notification(subscription_id):
+    """Call when an upgrade's annual is dropped after its first charge failed."""
+    _after_commit(notify_member_upgrade_failed, subscription_id)
+
+
+def schedule_upgrade_cancel_alert(monthly_subscription_id):
+    """URGENT to Carla: a replaced monthly still isn't cancelled at MP close
+    to its next charge — she must cancel it by hand."""
+    _after_commit(notify_carla_upgrade_cancel_failed, monthly_subscription_id)
+
+
 def _after_commit(func, object_id):
     try:
         transaction.on_commit(partial(func, object_id), robust=True)
@@ -143,7 +160,10 @@ def notify_subscription_charge(charge_id):
             .get(pk=charge_id)
         )
         subscription = charge.subscription
-        kind = 'Nueva suscripción' if _is_first_charge(charge) else 'Renovación de suscripción'
+        if _is_first_charge(charge):
+            kind = 'Cambio a plan anual' if subscription.replaces_id else 'Nueva suscripción'
+        else:
+            kind = 'Renovación de suscripción'
         amount = charge.amount if charge.amount is not None else subscription.amount
         currency = charge.currency or subscription.currency
         lines = [
@@ -268,7 +288,22 @@ def notify_buyer_subscription_charge(charge_id):
                 _url('memberships:mi_suscripcion'),
             ]
 
-        if _is_first_charge(charge):
+        if _is_first_charge(charge) and subscription.replaces_id:
+            subject = f'Tu {plan.name} ya está activo'
+            lines = [
+                f'Hola {_first_name(user)},',
+                '',
+                f'Se acreditó el primer cobro de tu {plan.name}: el cambio desde el plan mensual '
+                'quedó hecho. Tu plan mensual se cancela y no se te vuelve a cobrar; no perdés '
+                'ningún día de acceso.',
+                '',
+                *details,
+                '',
+                *renewal,
+                '',
+                f'Tus videos te esperan en {_url("catalog:video_library")}',
+            ]
+        elif _is_first_charge(charge):
             subject = f'¡Te damos la bienvenida a {plan.name}!'
             lines = [
                 f'Hola {_first_name(user)},',
@@ -413,6 +448,88 @@ def notify_carla_access_lapsed(subscription_id):
             'Lapse notice to Carla for Subscription %s failed to send — the subscription itself is '
             'unaffected', subscription_id,
         )
+
+
+# ── Plan upgrade (run after commit; never raise) ──────────────────────
+
+
+def notify_member_upgrade_scheduled(subscription_id):
+    try:
+        annual = _subscription(subscription_id)
+        user = annual.user
+        if not _has_email(user, f'upgrade notice for Subscription {subscription_id}'):
+            return
+        monthly = annual.replaces
+        from memberships.upgrades import monthly_renewal_at
+
+        starts = monthly_renewal_at(monthly) if monthly else annual.starts_at
+        amount = _money(annual.amount if annual.amount is not None else annual.plan.price,
+                        annual.currency or annual.plan.currency)
+        lines = [
+            f'Hola {_first_name(user)},',
+            '',
+            f'¡Listo! Tu cambio al {annual.plan.name} quedó programado.',
+            '',
+            f'· Seguís con tu plan mensual, con todo tu acceso, hasta el {_day(starts)}.',
+            f'· Ese día empieza tu {annual.plan.name}: {amount} por año.',
+            f'· Hoy no se te cobró nada. Mercado Pago hace el primer cobro anual el '
+            f'{_day(annual.starts_at)}, y recién ahí se cancela tu plan mensual — no se te cobra '
+            'dos veces ni perdés ningún día.',
+            '',
+            'Podés ver el estado de tu membresía acá:',
+            _url('memberships:mi_suscripcion'),
+            *_signature(),
+        ]
+        _send_to_buyer(user, f'Tu cambio al {annual.plan.name} quedó programado', lines)
+    except Exception:
+        logger.exception('Upgrade-scheduled notice for Subscription %s failed to send', subscription_id)
+
+
+def notify_member_upgrade_failed(subscription_id):
+    try:
+        annual = _subscription(subscription_id)
+        user = annual.user
+        if not _has_email(user, f'upgrade-failed notice for Subscription {subscription_id}'):
+            return
+        lines = [
+            f'Hola {_first_name(user)},',
+            '',
+            f'Mercado Pago no pudo cobrar el {annual.plan.name}, así que el cambio de plan no se hizo. '
+            'No te preocupes: seguís con tu plan mensual como siempre, con todo tu acceso.',
+            '',
+            'Si querés volver a intentarlo, revisá el medio de pago en tu cuenta de Mercado Pago y '
+            'pedí el cambio de nuevo desde acá:',
+            _url('memberships:mi_suscripcion'),
+            *_signature(),
+        ]
+        _send_to_buyer(user, f'No pudimos activar tu {annual.plan.name}', lines)
+    except Exception:
+        logger.exception('Upgrade-failed notice for Subscription %s failed to send', subscription_id)
+
+
+def notify_carla_upgrade_cancel_failed(monthly_subscription_id):
+    try:
+        monthly = _subscription(monthly_subscription_id)
+        from memberships.upgrades import monthly_renewal_at
+
+        renewal = monthly_renewal_at(monthly)
+        lines = [
+            'URGENTE: hay que cancelar a mano una suscripción mensual en Mercado Pago.',
+            '',
+            f'{_buyer(monthly.user)} se pasó al plan anual y el anual ya se cobró, pero no pudimos '
+            'cancelar su suscripción mensual en Mercado Pago (lo seguimos intentando cada 30 minutos).',
+            '',
+            f'Si no se cancela, Mercado Pago le va a cobrar el mensual de nuevo'
+            f'{" el " + _when(renewal) if renewal else ""}.',
+            '',
+            'Qué hacer: entrá a Mercado Pago → Suscripciones, buscá la de este miembro con el plan '
+            f'{monthly.plan.name} y cancelala.',
+            f'Referencia de Mercado Pago: {monthly.mp_preapproval_id}',
+            f'Referencia interna: suscripción #{monthly.pk}',
+        ]
+        _send(f'URGENTE: cancelar a mano el plan mensual de {_buyer(monthly.user)}', lines)
+    except Exception:
+        logger.exception('Upgrade cancel alert for Subscription %s failed to send', monthly_subscription_id)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────

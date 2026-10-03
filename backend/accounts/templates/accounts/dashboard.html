@@ -91,11 +91,18 @@
                 {{ subscription.ends_at|date:"d/m/Y" }}
               </p>
             {% endif %}
-            {% if pending_subscription %}
+            {% if pending_subscription and pending_subscription.replaces_id %}
+              {% if pending_subscription.mp_status == 'authorized' %}
+                <p style="color:var(--color-text-muted);font-size:0.9rem;margin-top:0.5rem" data-upgrade-scheduled>Tu {{ pending_subscription.plan.name }} empieza cuando termina tu plan mensual (primer cobro el {{ pending_subscription.starts_at|date:"d/m/Y" }}).</p>
+              {% endif %}
+            {% elif pending_subscription %}
               <p style="color:var(--color-text-muted);font-size:0.9rem;margin-top:0.5rem" data-pending-payment-notice>Estamos confirmando tu pago del {{ pending_subscription.plan.name }}.</p>
             {% endif %}
             {% if subscription.mp_preapproval_id %}
               <p style="margin-top:0.5rem"><a href="{% url 'memberships:mi_suscripcion' %}">Administrar suscripción →</a></p>
+              {% if upgrade_offer.can_upgrade %}
+                <p style="margin-top:0.25rem" data-upgrade-link><a href="{% url 'memberships:mi_suscripcion' %}">Pasate al {{ upgrade_offer.annual_plan.name }} →</a></p>
+              {% endif %}
             {% endif %}
           {% else %}
             <h3 style="margin-top:0.6rem">Plan gratuito</h3>

@@ -5,6 +5,7 @@ from accounts.views import SessionStateView
 from catalog.views import CategoryListView, ProgramListView, VideoViewSet
 from memberships.views import (
     CancelSubscriptionView, MembershipPlanListView, StartSubscriptionView, StartTrialView,
+    UpgradeSubscriptionView,
 )
 from payments.views import CheckoutInitiationView, MercadoPagoWebhookView
 from site_content.views import (
@@ -43,5 +44,7 @@ urlpatterns = [
     path('subscribe/', StartSubscriptionView.as_view(), name='start-subscription'),
     # Member cancels their own subscription (Phase 5B-2b) — same reasoning.
     path('subscription/cancel/', CancelSubscriptionView.as_view(), name='cancel-subscription'),
+    # Monthly -> Annual (memberships/upgrades.py) — same authenticated/CSRF model.
+    path('subscription/upgrade/', UpgradeSubscriptionView.as_view(), name='upgrade-subscription'),
     path('', include(router.urls)),
 ]

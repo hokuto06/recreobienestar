@@ -378,3 +378,123 @@ class CancelSubscriptionView(APIView):
             'status': subscription.status,
             'access_until': subscription.ends_at if subscription.is_active() else None,
         }
+
+
+class UpgradeSubscriptionView(APIView):
+    """POST /api/subscription/upgrade/ — Monthly -> Annual (see
+    memberships/upgrades.py for the whole flow and why it's safe). No body:
+    it always upgrades the member's OWN active monthly subscription. Same
+    authenticated/CSRF model as StartSubscriptionView.
+
+    Creates the annual Subscription (PENDING, replaces=<monthly>) and an MP
+    preapproval whose first charge is one day before the monthly's next
+    charge; answers with its init_point for the member to authorize. The
+    monthly is NOT touched here — it's cancelled only after the annual's
+    first charge is confirmed. Nothing is charged today.
+
+    IDEMPOTENT: the monthly row is locked for the whole request. A repeat
+    finds the annual already created: an authorized one -> 409 "ya está
+    programado"; an unauthorized one from the last hour at the same price ->
+    its init_point again (no second preapproval).
+
+    ON MP FAILURE: the new annual row is EXPIRED, the monthly is untouched,
+    and the member gets a clear 502."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        from .upgrades import ANNUAL_CADENCE, get_upgrade_offer
+
+        offer = get_upgrade_offer(request.user)
+        if offer.monthly is None:
+            return Response(
+                {'detail': 'El cambio al plan anual es para quienes tienen el plan mensual activo.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if not request.user.email:
+            return Response(
+                {'detail': 'Tu cuenta no tiene un email cargado — agregalo en Mi cuenta para continuar.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            Subscription.objects.select_for_update().get(pk=offer.monthly.pk)
+            offer = get_upgrade_offer(request.user)  # re-check under the lock
+            if offer.monthly is None:
+                return Response(
+                    {'detail': 'El cambio al plan anual es para quienes tienen el plan mensual activo.'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            if offer.scheduled is not None:
+                return Response(
+                    {'detail': 'Tu cambio al plan anual ya está programado.'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            if offer.refusal:
+                return Response({'detail': offer.refusal}, status=status.HTTP_409_CONFLICT)
+
+            plan = offer.annual_plan
+            pending = offer.pending
+            if (
+                pending is not None and pending.mp_init_point
+                and pending.amount == plan.price and pending.currency == plan.currency
+                and pending.created_at >= timezone.now() - PENDING_SIGNUP_REUSE_WINDOW
+            ):
+                return Response(
+                    {'init_point': pending.mp_init_point, 'preapproval_id': pending.mp_preapproval_id},
+                    status=status.HTTP_200_OK,
+                )
+
+            annual = Subscription.objects.create(
+                user=request.user, plan=plan, status=SubscriptionStatus.PENDING,
+                starts_at=offer.annual_charge_at, amount=plan.price, currency=plan.currency,
+                replaces=offer.monthly,
+            )
+            frequency, frequency_type = ANNUAL_CADENCE
+            start = timezone.localtime(offer.annual_charge_at).replace(microsecond=0)
+            start_iso = start.strftime('%Y-%m-%dT%H:%M:%S.000%z')
+            preapproval_data = {
+                'reason': f'{plan.name} — Recreo Bienestar'[:60],
+                'external_reference': subscription_external_reference(annual),
+                'payer_email': request.user.email,
+                'auto_recurring': {
+                    'frequency': frequency,
+                    'frequency_type': frequency_type,
+                    # First (annual) charge on this date, not today — see
+                    # memberships/upgrades.py (verified live 03/10/2026).
+                    'start_date': f'{start_iso[:-2]}:{start_iso[-2:]}',
+                    'transaction_amount': float(plan.price),
+                    'currency_id': plan.currency,
+                },
+                'back_url': f'{request.scheme}://{request.get_host()}/mi-cuenta/suscripcion/',
+                'status': 'pending',
+            }
+            try:
+                sdk = mercadopago.SDK(settings.MERCADOPAGO_ACCESS_TOKEN)
+                result = sdk.preapproval().create(preapproval_data)
+                result.raise_for_status()
+                preapproval = result['response']
+                if not preapproval.get('id') or not preapproval.get('init_point'):
+                    raise ValueError('preapproval response missing id/init_point')
+            except Exception:
+                logger.exception(
+                    'Mercado Pago preapproval creation failed for upgrade Subscription %s (replacing %s)',
+                    annual.id, offer.monthly.id,
+                )
+                annual.status = SubscriptionStatus.EXPIRED
+                annual.ends_at = timezone.now()
+                annual.save(update_fields=['status', 'ends_at', 'updated_at'])
+                return Response(
+                    {'detail': 'No pudimos preparar el cambio en Mercado Pago. No se cambió nada: '
+                               'seguís con tu plan mensual. Intentá de nuevo en unos minutos.'},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
+
+            annual.mp_preapproval_id = str(preapproval['id'])
+            annual.mp_status = preapproval.get('status', '') or ''
+            annual.mp_init_point = preapproval['init_point']
+            annual.save(update_fields=['mp_preapproval_id', 'mp_status', 'mp_init_point', 'updated_at'])
+
+        return Response(
+            {'init_point': annual.mp_init_point, 'preapproval_id': annual.mp_preapproval_id},
+            status=status.HTTP_201_CREATED,
+        )

@@ -558,6 +558,20 @@ purchase (anything else is 404). Not covered by the DB backup — like
 elsewhere. Carla uploads them in the Admin (Propuestas → "PDF para
 descargar").
 
+**Plan upgrade (Monthly -> Annual), `memberships/upgrades.py`.** Upgrade
+only, no proration. The member confirms on `/mi-cuenta/suscripcion/`
+(`POST /api/subscription/upgrade/`); we create the annual Subscription
+(PENDING, `replaces` = the monthly) and an MP preapproval with
+`auto_recurring.start_date` one day before the monthly's next charge — MP
+charges nothing at authorization (verified live 03/10/2026). The monthly is
+cancelled at MP only after the annual's first charge is confirmed; the
+annual's year counts from the end of the monthly's paid month. A failed
+first annual charge cancels the annual instead (the monthly renews as
+usual). Failed MP cancellations are retried by the reconcile timer; if the
+monthly still isn't cancelled 12h before its next charge, Carla gets an
+urgent email to cancel it by hand. Refused within 3 days of the monthly's
+renewal (the page says why and from when it's possible).
+
 ## 15. Known infrastructure constraints
 
 - **t2.micro, 954MB RAM, 0 swap.** Baseline OS/daemon overhead

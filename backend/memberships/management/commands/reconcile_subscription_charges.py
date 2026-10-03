@@ -37,6 +37,7 @@ an ISO timestamp, e.g.
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand
+from django.db.models import Q
 from django.utils import timezone
 
 from common.choices import SubscriptionStatus
@@ -63,7 +64,10 @@ class Command(BaseCommand):
         since = timezone.now() - timedelta(days=days)
         candidates = (
             Subscription.objects
-            .filter(status=SubscriptionStatus.PENDING, is_trial=False, created_at__gte=since)
+            .filter(status=SubscriptionStatus.PENDING, is_trial=False)
+            # Plan-upgrade annuals are created up to ~a month before their
+            # first charge, so they're windowed by that scheduled start.
+            .filter(Q(created_at__gte=since) | Q(replaces__isnull=False, starts_at__gte=since))
             .exclude(mp_preapproval_id='')
             .exclude(charges__outcome=SubscriptionChargeOutcome.ACTIVATED)
             .distinct().order_by('id')
@@ -94,6 +98,17 @@ class Command(BaseCommand):
                     errors += 1
             if not dry_run and subscription.status != SubscriptionStatus.PENDING:
                 activated += 1
+        if not dry_run:
+            from memberships.upgrades import retry_upgrade_followups
+
+            up = retry_upgrade_followups()
+            if any(up.values()):
+                self._line(
+                    f'upgrades: {up["monthly_cancelled"]} replaced monthly cancelled, '
+                    f'{up["monthly_failed"]} still failing ({up["alerts"]} alerted to Carla), '
+                    f'{up["failed_annual_cancelled"]} failed annual cancelled, '
+                    f'{up["failed_annual_failed"]} still failing'
+                )
         verb = 'would activate' if dry_run else 'activated'
         self._line(
             f'reconcile{" (dry run)" if dry_run else ""}: {total} candidate(s), '

@@ -120,12 +120,20 @@ def mi_suscripcion(request):
     OWN subscription."""
     from .views import CANCELLABLE_STATUSES
 
-    subscription = (
+    from .upgrades import get_upgrade_offer
+
+    paid = list(
         Subscription.objects.filter(user=request.user, is_trial=False)
-        .exclude(mp_preapproval_id='').select_related('plan').order_by('-created_at').first()
+        .exclude(mp_preapproval_id='').select_related('plan').order_by('-created_at')
     )
+    # The one that currently grants access, if any (so a pending plan
+    # upgrade never hides the monthly that's still running); else the most
+    # recent one.
+    subscription = next((s for s in paid if s.is_active()), paid[0] if paid else None)
+    upgrade = get_upgrade_offer(request.user)
     return render(request, 'memberships/mi_suscripcion.html', {
         'subscription': subscription,
         'is_active': subscription is not None and subscription.is_active(),
         'cancellable': subscription is not None and subscription.status in CANCELLABLE_STATUSES,
+        'upgrade': upgrade if upgrade.monthly is not None else None,
     })

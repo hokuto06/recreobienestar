@@ -173,6 +173,17 @@ class Subscription(TimeStampedModel):
         'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='superseded_trials',
         help_text='Suscripción paga que reemplazó a esta prueba gratuita.',
     )
+    # Plan upgrade (Monthly -> Annual, memberships/upgrades.py): the annual
+    # subscription points at the monthly one it replaces. The monthly is
+    # cancelled at Mercado Pago only AFTER this annual's first charge is
+    # confirmed — never before.
+    replaces = models.ForeignKey(
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='replaced_by',
+        help_text='Suscripción mensual que esta suscripción anual reemplaza (cambio de plan).',
+    )
+    # Set on the REPLACED (monthly) row once Carla has been alerted that its
+    # MP cancellation keeps failing — so the urgent email goes out once.
+    upgrade_cancel_alerted_at = models.DateTimeField(null=True, blank=True, editable=False)
 
     class Meta:
         ordering = ['-created_at']
