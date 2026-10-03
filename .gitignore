@@ -47,3 +47,6 @@ backend/nginx/logs/*
 /*.png
 /*.webp
 /*.heic
+
+# Paid Offering deliverables (PRIVATE_MEDIA_ROOT) — never in git.
+backend/private_media/

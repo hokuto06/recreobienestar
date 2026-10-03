@@ -1,3 +1,4 @@
+from django import forms
 from django.contrib import admin, messages
 from django.shortcuts import redirect
 from django.urls import reverse
@@ -30,8 +31,25 @@ class SiteSettingsAdmin(admin.ModelAdmin):
         return redirect(reverse('admin:site_content_sitesettings_change', args=[obj.pk]))
 
 
+class OfferingAdminForm(forms.ModelForm):
+    """The deliverable lives in private storage with no public URL, so
+    Django's default ClearableFileInput (which links to the file's URL)
+    is replaced by a plain file input + an explicit "remove" checkbox; the
+    current file is described by OfferingAdmin.deliverable_status."""
+    remove_deliverable = forms.BooleanField(
+        required=False, label='Quitar el PDF actual',
+        help_text='Marcalo para dejar esta propuesta sin PDF (si además subís uno nuevo, se usa el nuevo).',
+    )
+
+    class Meta:
+        model = Offering
+        fields = '__all__'
+        widgets = {'deliverable': forms.FileInput(attrs={'accept': 'application/pdf,.pdf'})}
+
+
 @admin.register(Offering)
 class OfferingAdmin(admin.ModelAdmin):
+    form = OfferingAdminForm
     list_display = (
         'name', 'price', 'currency', 'is_active', 'display_order',
         'has_ars_link', 'has_usd_link',
@@ -40,7 +58,7 @@ class OfferingAdmin(admin.ModelAdmin):
     list_filter = ('is_active', 'currency')
     search_fields = ('name', 'description')
     prepopulated_fields = {'slug': ('name',)}
-    readonly_fields = ('created_at', 'updated_at')
+    readonly_fields = ('created_at', 'updated_at', 'deliverable_status')
     ordering = ('display_order', 'name')
     # filter_horizontal rather than the default multi-select box: picking
     # videos into a package is easier as a searchable two-pane widget once
@@ -55,11 +73,41 @@ class OfferingAdmin(admin.ModelAdmin):
             'fields': ('videos',),
             'description': 'Videos que se desbloquean al comprar esta propuesta. Opcional.',
         }),
+        ('PDF para descargar', {
+            'fields': ('deliverable_status', 'deliverable', 'remove_deliverable'),
+            'description': (
+                'Opcional. Lo descargan solo quienes compraron la propuesta, desde su cuenta y desde '
+                'el mail de confirmación. El archivo no queda publicado en ninguna dirección pública.'
+            ),
+        }),
         ('Visibilidad', {'fields': ('is_active', 'display_order')}),
         ('Fechas', {'fields': ('created_at', 'updated_at'), 'classes': ('collapse',)}),
     )
 
     actions = ['activate', 'deactivate']
+
+    @admin.display(description='PDF actual')
+    def deliverable_status(self, obj):
+        if not obj or not obj.deliverable:
+            return 'Sin PDF.'
+        try:
+            size = f'{obj.deliverable.size / (1024 * 1024):.1f} MB'
+        except OSError:
+            return 'Hay un PDF registrado, pero el archivo no se encuentra. Volvé a subirlo.'
+        return f'PDF cargado ({size}). Quienes la compraron lo descargan en /propuestas/{obj.slug}/descargar/.'
+
+    def save_model(self, request, obj, form, change):
+        previous = None
+        if change:
+            previous = Offering.objects.filter(pk=obj.pk).values_list('deliverable', flat=True).first()
+        new_upload = 'deliverable' in form.changed_data and form.cleaned_data.get('deliverable')
+        if form.cleaned_data.get('remove_deliverable') and not new_upload:
+            obj.deliverable = ''
+        super().save_model(request, obj, form, change)
+        # Replaced or removed: delete the old file so no orphaned paid PDF
+        # lingers in storage.
+        if previous and previous != obj.deliverable.name:
+            obj.deliverable.storage.delete(previous)
 
     @admin.display(description='Link ARS', boolean=True)
     def has_ars_link(self, obj):

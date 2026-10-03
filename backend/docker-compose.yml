@@ -16,6 +16,11 @@
 volumes:
   recreo_db_data:
   recreo_media:
+  # Paid Offering PDFs (PRIVATE_MEDIA_ROOT). Mounted into recreo-django
+  # ONLY — never into recreo-nginx — and never served under /media/: the
+  # only way out is the purchase-checking download view. See
+  # site_content/storage.py.
+  recreo_private_media:
 
 networks:
   # recreo-django <-> recreo-db only. No other container, in this project
@@ -62,6 +67,7 @@ services:
         condition: service_healthy
     volumes:
       - recreo_media:/app/media
+      - recreo_private_media:/app/private_media
     networks:
       - recreo_internal
       - recreo_public

@@ -181,17 +181,33 @@ def notify_buyer_offering_purchase(purchase_id):
         offering = purchase.offering
         amount = purchase.amount if purchase.amount is not None else offering.price
         currency = purchase.currency or offering.currency
-        lines = [
-            f'Hola {_first_name(purchase.user)},',
-            '',
-            f'¡Gracias por tu compra! Ya tenés acceso a «{offering.name}».',
-            '',
+        how_to_access = [
             'Para empezar, entrá a tu cuenta: los videos están en «Disponibles para vos».',
             _url('accounts:dashboard'),
             '',
             'También los encontrás en la videoteca:',
             _url('catalog:video_library'),
             '',
+        ]
+        if offering.deliverable:
+            # The protected download view (purchase-checked, asks to log in
+            # if needed) — never a direct file URL. Offerings without a file
+            # keep exactly the copy above.
+            download = [
+                'Descargá tu PDF acá (si no ingresaste, te va a pedir que entres con tu cuenta):',
+                f'{settings.SITE_URL}{reverse("site_content:offering_download", args=[offering.slug])}',
+                '',
+                'También lo tenés siempre en tu cuenta, en «Tus descargas»:',
+                _url('accounts:dashboard'),
+                '',
+            ]
+            how_to_access = download + (how_to_access if offering.videos.exists() else [])
+        lines = [
+            f'Hola {_first_name(purchase.user)},',
+            '',
+            f'¡Gracias por tu compra! Ya tenés acceso a «{offering.name}».',
+            '',
+            *how_to_access,
             'Detalle de tu compra',
             f'· {offering.name}',
             f'· {_money(amount, currency)}',

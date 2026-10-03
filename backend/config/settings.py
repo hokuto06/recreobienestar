@@ -147,6 +147,11 @@ STORAGES = {
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+# Paid files (Offering deliverables). NOT under MEDIA_ROOT and never served
+# directly — only through the purchase-checking download view. In production
+# it's the recreo_private_media volume, mounted into recreo-django only. See
+# site_content/storage.py.
+PRIVATE_MEDIA_ROOT = BASE_DIR / 'private_media'
 
 # Download a video's poster from YouTube automatically after it's saved
 # (catalog/posters.py). Off in tests/local checks (settings_test_sqlite),
